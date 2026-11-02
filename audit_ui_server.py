@@ -6,6 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import smtplib
+from email.message import EmailMessage
+from datetime import datetime, timedelta, timezone
 import shutil
 import sys
 import tempfile
@@ -181,6 +185,76 @@ def build_audit_payload(root: Path, only_case: str | None, strict_option_id: boo
         },
         "results": rows,
     }
+
+
+CERT_CASES = range(1, 15)
+CERT_NOTIFY_TO = "aryan.singh@tripjack.com"
+
+
+def _case_number(name: str) -> int | None:
+    """Same rule as the UI: number after case/tc/test, else the last number in the name."""
+    m = re.search(r"(?:case|tc|test)[\s_-]*0*(\d{1,2})(?!\d)", name, re.I)
+    if m:
+        return int(m.group(1))
+    nums = re.findall(r"\d{1,2}(?!\d)", name)
+    return int(nums[-1]) if nums else None
+
+
+def all_cases_passed(result: dict) -> bool:
+    """True only when every certification case 1-14 is present and PASS."""
+    status: dict[int, str] = {}
+    for row in result.get("results", []):
+        n = _case_number(str(row.get("case", "")))
+        if n in CERT_CASES and n not in status:
+            status[n] = row.get("status")
+    return all(status.get(n) == "PASS" for n in CERT_CASES)
+
+
+def send_certification_mail(partner: dict, result: dict) -> str:
+    """Email Tripjack that a partner passed all test cases.
+    Needs SMTP_HOST, SMTP_USER, SMTP_PASS (optional SMTP_PORT, MAIL_FROM, CERT_NOTIFY_TO).
+    Returns "sent", "not_configured" or "failed"."""
+    host, user, password = (os.environ.get(k) for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS"))
+    if not (host and user and password):
+        print("[cert-mail] SMTP not configured; mail not sent", flush=True)
+        return "not_configured"
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    to = os.environ.get("CERT_NOTIFY_TO", CERT_NOTIFY_TO)
+    when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
+
+    msg = EmailMessage()
+    msg["Subject"] = f"Hotel V3 certification passed - {partner.get('company') or 'Unknown company'}"
+    msg["From"] = os.environ.get("MAIL_FROM", user)
+    msg["To"] = to
+    if partner.get("email"):
+        msg["Reply-To"] = partner["email"]
+    cases = sorted(result.get("results", []), key=lambda r: _case_number(str(r.get("case", ""))) or 99)
+    msg.set_content(
+        "A partner has passed all 14 Hotel API V3 UAT test cases on the Tripjack Certification V3 Hotel checker.\n\n"
+        f"Name         : {partner.get('name', '')}\n"
+        f"Company      : {partner.get('company', '')}\n"
+        f"TJ user ID   : {partner.get('tjUserId', '')}\n"
+        f"Phone        : {partner.get('phone', '')}\n"
+        f"Email        : {partner.get('email', '')}\n"
+        f"Checked on   : {when}\n"
+        f"Folder       : {result.get('source_folder', '')}\n\n"
+        "Results:\n" + "\n".join(f"  {r.get('case')}: {r.get('status')}" for r in cases) + "\n"
+    )
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+                smtp.login(user, password)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as smtp:
+                smtp.starttls()
+                smtp.login(user, password)
+                smtp.send_message(msg)
+        print(f"[cert-mail] sent to {to} for {partner.get('company')}", flush=True)
+        return "sent"
+    except Exception as e:  # never fail the upload because of mail
+        print(f"[cert-mail] failed: {e}", flush=True)
+        return "failed"
 
 
 class AuditUIHandler(BaseHTTPRequestHandler):
@@ -486,6 +560,9 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 result["session_id"] = session_id
                 result["source_folder"] = parts[0] if files else "uploaded"
                 result["partner"] = partner
+                result["certified"] = all_cases_passed(result)
+                if result["certified"]:
+                    result["certification_mail"] = send_certification_mail(partner, result)
                 summary = result["summary"]
                 print("[upload] " + json.dumps({**partner, "passed": summary.get("passed"), "failed": summary.get("failed")}), flush=True)
                 self._send_json(200, result)

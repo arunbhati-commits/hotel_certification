@@ -30,6 +30,23 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 - `api/upload_folder.py` runs the same upload handler as the local server as a Python function.
 - Vercel limits a request body to about 4.5 MB, so very large test-case folders must be run locally with `./run.sh`.
 
+## Certification email
+
+When an upload passes all 14 test cases, the server emails the partner's form details (name, company,
+TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`. Set these environment variables
+(Vercel: Project → Settings → Environment Variables, then redeploy):
+
+| Variable | Example |
+|---|---|
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` (or `465` for SSL) |
+| `SMTP_USER` | the sending mailbox |
+| `SMTP_PASS` | its app password |
+| `MAIL_FROM` | optional, defaults to `SMTP_USER` |
+| `CERT_NOTIFY_TO` | optional, defaults to `aryan.singh@tripjack.com` |
+
+Without them the check still works, but no email is sent (`[cert-mail] SMTP not configured` in the logs).
+
 ## Expected upload
 
 One sub-folder per test case (`Test Case 1` … `Test Case 14`), each with the request and

@@ -205,7 +205,10 @@ function renderErrorReport() {
   const groups = errorReportItems();
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   if (!groups.length) {
-    $("errorReport").innerHTML = `<div class="er-ok"><div class="er-ok-icon">✓</div><div><b>No errors found.</b><br>All 14 test cases passed. You are ready to submit for certification.</div></div>`;
+    const mail = lastResults && lastResults.payload && lastResults.payload.certification_mail;
+    const next = mail === "sent" ? "The Tripjack certification team has been informed and will contact you."
+      : "You are ready to submit for certification.";
+    $("errorReport").innerHTML = `<div class="er-ok"><div class="er-ok-icon">✓</div><div><b>No errors found.</b><br>All 14 test cases passed. ${next}</div></div>`;
     return;
   }
   $("errorReport").innerHTML = `<p class="er-sum"><b>${plural(total, "error")}</b> in <b>${plural(groups.length, "test case")}</b>. Fix each one as shown, then upload again.</p>` +
