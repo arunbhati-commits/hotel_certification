@@ -263,12 +263,12 @@ def _send_via_smtp(host: str, user: str, password: str, sender: str, to: str, re
         msg["Reply-To"] = reply_to
     msg.set_content(text)
     if port == 465:
-        with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+        with smtplib.SMTP_SSL(host, port, timeout=15, context=_ssl_context()) as smtp:
             smtp.login(user, password)
             smtp.send_message(msg)
     else:
         with smtplib.SMTP(host, port, timeout=15) as smtp:
-            smtp.starttls()
+            smtp.starttls(context=_ssl_context())
             smtp.login(user, password)
             smtp.send_message(msg)
 
