@@ -5,4 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from audit_ui_server import AuditUIHandler as handler  # noqa: E402,F401
+from audit_ui_server import AuditUIHandler  # noqa: E402
+
+
+class handler(AuditUIHandler):
+    """Vercel needs a top-level class named `handler`."""
