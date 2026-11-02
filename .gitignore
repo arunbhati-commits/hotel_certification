@@ -12,3 +12,4 @@ __pycache__/
 !/api/
 !/vercel.json
 .vercel/
+!/tools/

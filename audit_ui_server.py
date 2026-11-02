@@ -253,6 +253,19 @@ def _send_via_mailercloud(api_key: str, sender: str, to: str, reply_to: str, sub
         raise RuntimeError(f"Mailercloud HTTP {e.code}: {e.read(500).decode('utf-8', 'replace')}") from None
 
 
+def _send_via_webhook(url: str, partner: dict, outcome: str, to: str, subject: str, text: str) -> None:
+    """Post to a Google Apps Script web app that emails from the script owner's Gmail (no SMTP or DNS)."""
+    payload = {"to": to, "subject": subject, "text": text, "outcome": outcome, **partner}
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode(), method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": "TripjackCertificationV3/1.0"},
+    )
+    with urllib.request.urlopen(req, timeout=20, context=_ssl_context()) as res:
+        body = res.read(300).decode("utf-8", "replace")
+    if '"ok":true' not in body.replace(" ", ""):
+        raise RuntimeError(f"webhook replied: {body}")
+
+
 def _send_via_smtp(host: str, user: str, password: str, sender: str, to: str, reply_to: str, subject: str, text: str) -> None:
     port = int(os.environ.get("SMTP_PORT", "587"))
     msg = EmailMessage()
@@ -278,12 +291,13 @@ def send_certification_mail(partner: dict, result: dict) -> str:
     Uses Mailercloud when MAILERCLOUD_API_KEY and MAIL_FROM are set, otherwise SMTP
     (SMTP_HOST, SMTP_USER, SMTP_PASS, optional SMTP_PORT / MAIL_FROM). CERT_NOTIFY_TO overrides the recipient.
     Returns "sent", "not_configured" or "failed"."""
+    webhook = os.environ.get("CERT_WEBHOOK_URL")
     api_key = os.environ.get("MAILERCLOUD_API_KEY")
     host, user, password = (os.environ.get(k) for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS"))
     sender = os.environ.get("MAIL_FROM") or user
     use_api = bool(api_key and sender)
-    if not use_api and not (host and user and password):
-        print("[cert-mail] mail not configured (set MAILERCLOUD_API_KEY + MAIL_FROM, or SMTP_*); mail not sent", flush=True)
+    if not webhook and not use_api and not (host and user and password):
+        print("[cert-mail] mail not configured (set CERT_WEBHOOK_URL, MAILERCLOUD_API_KEY + MAIL_FROM, or SMTP_*); mail not sent", flush=True)
         return "not_configured"
     to = os.environ.get("CERT_NOTIFY_TO", CERT_NOTIFY_TO)
     when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
@@ -305,11 +319,16 @@ def send_certification_mail(partner: dict, result: dict) -> str:
     )
     reply_to = partner.get("email", "")
     try:
-        if use_api:
+        if webhook:
+            _send_via_webhook(webhook, partner, outcome, to, subject, text)
+            via = "apps-script"
+        elif use_api:
             _send_via_mailercloud(api_key, sender, to, reply_to, subject, text)
+            via = "mailercloud"
         else:
             _send_via_smtp(host, user, password, sender, to, reply_to, subject, text)
-        print(f"[cert-mail] sent to {to} for {partner.get('company')} via {'mailercloud' if use_api else 'smtp'}", flush=True)
+            via = "smtp"
+        print(f"[cert-mail] sent to {to} for {partner.get('company')} via {via}", flush=True)
         return "sent"
     except Exception as e:  # never fail the upload because of mail
         print(f"[cert-mail] failed: {e}", flush=True)

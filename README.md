@@ -35,7 +35,11 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 After every upload (for now; the 14/14 condition is switched off) the server emails the partner's form details (name, company,
 TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`.
 
-**Mailercloud (preferred):** set `MAILERCLOUD_API_KEY` and `MAIL_FROM` (a sender verified in Mailercloud);
+**Google Apps Script (no SMTP, no DNS):** deploy `tools/apps_script_mailer.gs` as a web app from your Google
+account (Execute as: Me, Access: Anyone) and set `CERT_WEBHOOK_URL` to its `/exec` URL. It emails from your
+Gmail and logs each upload to a Google Sheet.
+
+**Mailercloud:** set `MAILERCLOUD_API_KEY` and `MAIL_FROM` (a sender verified in Mailercloud);
 optional `MAIL_FROM_NAME`.
 
 **Or SMTP:** set these environment variables
