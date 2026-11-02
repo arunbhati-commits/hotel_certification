@@ -10,6 +10,7 @@
   "routes": [
     { "src": "/api/upload_folder", "dest": "/api/upload_folder.py" },
     { "src": "/", "dest": "/audit_ui/index.html" },
-    { "src": "/(styles\\.css|app\\.js)", "dest": "/audit_ui/$1" }
+    { "src": "/(styles\\.css|app\\.js)", "dest": "/audit_ui/$1" },
+    { "src": "/sample/(.*)", "dest": "/audit_ui/sample/$1" }
   ]
 }

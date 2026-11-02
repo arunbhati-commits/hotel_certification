@@ -259,6 +259,7 @@ class AuditUIHandler(BaseHTTPRequestHandler):
             ".html": "text/html; charset=utf-8",
             ".css": "text/css; charset=utf-8",
             ".js": "application/javascript; charset=utf-8",
+            ".zip": "application/zip",
         }.get(suffix, "application/octet-stream")
         self._send_bytes(200, file_path.read_bytes(), ctype)
 
