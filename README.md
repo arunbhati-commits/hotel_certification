@@ -33,7 +33,12 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 ## Certification email
 
 After every upload (for now; the 14/14 condition is switched off) the server emails the partner's form details (name, company,
-TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`. Set these environment variables
+TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`.
+
+**Mailercloud (preferred):** set `MAILERCLOUD_API_KEY` and `MAIL_FROM` (a sender verified in Mailercloud);
+optional `MAIL_FROM_NAME`.
+
+**Or SMTP:** set these environment variables
 (Vercel: Project → Settings → Environment Variables, then redeploy):
 
 | Variable | Example |

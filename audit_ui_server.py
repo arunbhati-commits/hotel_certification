@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -14,6 +15,8 @@ import shutil
 import sys
 import tempfile
 import traceback
+import urllib.error
+import urllib.request
 import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -210,28 +213,76 @@ def all_cases_passed(result: dict) -> bool:
     return all(status.get(n) == "PASS" for n in CERT_CASES)
 
 
-def send_certification_mail(partner: dict, result: dict) -> str:
-    """Email Tripjack that a partner passed all test cases.
-    Needs SMTP_HOST, SMTP_USER, SMTP_PASS (optional SMTP_PORT, MAIL_FROM, CERT_NOTIFY_TO).
-    Returns "sent", "not_configured" or "failed"."""
-    host, user, password = (os.environ.get(k) for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS"))
-    if not (host and user and password):
-        print("[cert-mail] SMTP not configured; mail not sent", flush=True)
-        return "not_configured"
+MAILERCLOUD_URL = "https://email-api.mailercloud.com/email-api"
+
+
+def _send_via_mailercloud(api_key: str, sender: str, to: str, reply_to: str, subject: str, text: str) -> None:
+    payload = {
+        "email": {
+            "from": sender,
+            "fromName": os.environ.get("MAIL_FROM_NAME", "Tripjack Certification"),
+            "subject": subject,
+            "text": text,
+            "html": "<html><body><pre style=\"font-family:Menlo,Consolas,monospace;font-size:13px\">"
+                    + html.escape(text) + "</pre></body></html>",
+            "recipients": {"to": [{"name": "Tripjack Certification", "email": to}]},
+        },
+        "metadata": {"campaignType": "TRANSACTIONAL"},
+        "version": "1.0",
+    }
+    if reply_to:
+        payload["email"]["replyTo"] = [reply_to]
+    req = urllib.request.Request(
+        MAILERCLOUD_URL, data=json.dumps(payload).encode(), method="POST",
+        headers={"Authorization": api_key, "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as res:
+            print(f"[cert-mail] mailercloud {res.status}: {res.read(300).decode('utf-8', 'replace')}", flush=True)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Mailercloud HTTP {e.code}: {e.read(500).decode('utf-8', 'replace')}") from None
+
+
+def _send_via_smtp(host: str, user: str, password: str, sender: str, to: str, reply_to: str, subject: str, text: str) -> None:
     port = int(os.environ.get("SMTP_PORT", "587"))
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = to
+    if reply_to:
+        msg["Reply-To"] = reply_to
+    msg.set_content(text)
+    if port == 465:
+        with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+            smtp.login(user, password)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(host, port, timeout=15) as smtp:
+            smtp.starttls()
+            smtp.login(user, password)
+            smtp.send_message(msg)
+
+
+def send_certification_mail(partner: dict, result: dict) -> str:
+    """Email Tripjack the partner's details and results.
+    Uses Mailercloud when MAILERCLOUD_API_KEY and MAIL_FROM are set, otherwise SMTP
+    (SMTP_HOST, SMTP_USER, SMTP_PASS, optional SMTP_PORT / MAIL_FROM). CERT_NOTIFY_TO overrides the recipient.
+    Returns "sent", "not_configured" or "failed"."""
+    api_key = os.environ.get("MAILERCLOUD_API_KEY")
+    host, user, password = (os.environ.get(k) for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS"))
+    sender = os.environ.get("MAIL_FROM") or user
+    use_api = bool(api_key and sender)
+    if not use_api and not (host and user and password):
+        print("[cert-mail] mail not configured (set MAILERCLOUD_API_KEY + MAIL_FROM, or SMTP_*); mail not sent", flush=True)
+        return "not_configured"
     to = os.environ.get("CERT_NOTIFY_TO", CERT_NOTIFY_TO)
     when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
 
-    msg = EmailMessage()
     summary = result.get("summary", {})
     outcome = "passed" if all_cases_passed(result) else f"{summary.get('passed', 0)}/{len(CERT_CASES)} passed"
-    msg["Subject"] = f"Hotel V3 certification {outcome} - {partner.get('company') or 'Unknown company'}"
-    msg["From"] = os.environ.get("MAIL_FROM", user)
-    msg["To"] = to
-    if partner.get("email"):
-        msg["Reply-To"] = partner["email"]
+    subject = f"Hotel V3 certification {outcome} - {partner.get('company') or 'Unknown company'}"
     cases = sorted(result.get("results", []), key=lambda r: _case_number(str(r.get("case", ""))) or 99)
-    msg.set_content(
+    text = (
         f"A partner uploaded Hotel API V3 UAT test cases on the Tripjack Certification V3 Hotel checker: {outcome}.\n\n"
         f"Name         : {partner.get('name', '')}\n"
         f"Company      : {partner.get('company', '')}\n"
@@ -242,17 +293,13 @@ def send_certification_mail(partner: dict, result: dict) -> str:
         f"Folder       : {result.get('source_folder', '')}\n\n"
         "Results:\n" + "\n".join(f"  {r.get('case')}: {r.get('status')}" for r in cases) + "\n"
     )
+    reply_to = partner.get("email", "")
     try:
-        if port == 465:
-            with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
-                smtp.login(user, password)
-                smtp.send_message(msg)
+        if use_api:
+            _send_via_mailercloud(api_key, sender, to, reply_to, subject, text)
         else:
-            with smtplib.SMTP(host, port, timeout=15) as smtp:
-                smtp.starttls()
-                smtp.login(user, password)
-                smtp.send_message(msg)
-        print(f"[cert-mail] sent to {to} for {partner.get('company')}", flush=True)
+            _send_via_smtp(host, user, password, sender, to, reply_to, subject, text)
+        print(f"[cert-mail] sent to {to} for {partner.get('company')} via {'mailercloud' if use_api else 'smtp'}", flush=True)
         return "sent"
     except Exception as e:  # never fail the upload because of mail
         print(f"[cert-mail] failed: {e}", flush=True)
