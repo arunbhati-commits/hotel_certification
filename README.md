@@ -22,6 +22,14 @@ python3 validate_hotel_test_cases.py --root "/path/to/test cases"
 python3 validate_hotel_test_cases.py --root "/path/to/test cases" --case "Test Case 4" --json-report report.json
 ```
 
+## Deploy on Vercel
+
+The repo deploys to Vercel as-is (Framework preset: **Other**, no build command):
+
+- `/` serves `audit_ui/index.html` (see `vercel.json` rewrites).
+- `api/upload-folder.py` runs the same upload handler as the local server as a Python function.
+- Vercel limits a request body to about 4.5 MB, so very large test-case folders must be run locally with `./run.sh`.
+
 ## Expected upload
 
 One sub-folder per test case (`Test Case 1` … `Test Case 14`), each with the request and
@@ -47,5 +55,6 @@ JSON (with line and column).
 | `audit_ui_server.py` | Local web server (folder upload, runs the validator) |
 | `audit_ui/` | Web UI (HTML, CSS, JS) |
 | `run.sh` | Starts the server |
+| `api/upload-folder.py`, `vercel.json` | Vercel deployment |
 
 Uploaded files are written to a temporary folder only for the check and deleted right after.

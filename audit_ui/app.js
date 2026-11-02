@@ -411,6 +411,7 @@ async function send(url, options, busyMsg, sourceName) {
   try {
     const res = await fetch(url, options);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 413) throw new Error("The folder is too large to upload (max about 4 MB). Remove files that are not test case requests/responses and try again.");
     if (!res.ok) throw new Error(data.error || res.statusText);
     lastResults = { payload: data };
     currentView = "errors";

@@ -9,3 +9,6 @@
 !/audit_ui/
 __pycache__/
 .DS_Store
+!/api/
+!/vercel.json
+.vercel/
