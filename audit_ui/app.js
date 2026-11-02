@@ -443,7 +443,7 @@ function uploadFolder(files) {
   if (!usable.length) return showStatus("No usable files found in that folder.", true);
   const form = new FormData();
   usable.forEach((f) => form.append("files", f, f._relPath || f.webkitRelativePath || f.name));
-  send("/api/upload-folder", { method: "POST", body: form }, `Checking ${usable.length} files…`,
+  send("/api/upload_folder", { method: "POST", body: form }, `Checking ${usable.length} files…`,
     (usable[0]._relPath || usable[0].webkitRelativePath || "").split("/")[0] || "your folder");
 }
 

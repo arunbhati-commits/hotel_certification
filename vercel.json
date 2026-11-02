@@ -1,10 +1,4 @@
 {
-  "functions": {
-    "api/upload-folder.py": {
-      "includeFiles": "{audit_ui_server.py,validate_hotel_test_cases.py}",
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     { "source": "/", "destination": "/audit_ui/index.html" },
     { "source": "/(styles\\.css|app\\.js)", "destination": "/audit_ui/$1" }

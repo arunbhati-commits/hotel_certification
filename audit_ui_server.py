@@ -268,7 +268,7 @@ class AuditUIHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
 
-            if path == "/api/upload-folder":
+            if path in ("/api/upload-folder", "/api/upload_folder"):
                 self._handle_folder_upload()
                 return
 
