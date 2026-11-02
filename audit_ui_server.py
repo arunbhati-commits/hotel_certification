@@ -9,6 +9,7 @@ import json
 import os
 import re
 import smtplib
+import ssl
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 import shutil
@@ -216,6 +217,14 @@ def all_cases_passed(result: dict) -> bool:
 MAILERCLOUD_URL = "https://email-api.mailercloud.com/email-api"
 
 
+def _ssl_context() -> ssl.SSLContext:
+    """python.org Python on macOS ships without CA certs; fall back to the system bundle."""
+    paths = ssl.get_default_verify_paths()
+    if not (paths.cafile or (paths.capath and os.listdir(paths.capath))) and os.path.exists("/etc/ssl/cert.pem"):
+        return ssl.create_default_context(cafile="/etc/ssl/cert.pem")
+    return ssl.create_default_context()
+
+
 def _send_via_mailercloud(api_key: str, sender: str, to: str, reply_to: str, subject: str, text: str) -> None:
     payload = {
         "email": {
@@ -234,10 +243,11 @@ def _send_via_mailercloud(api_key: str, sender: str, to: str, reply_to: str, sub
         payload["email"]["replyTo"] = [reply_to]
     req = urllib.request.Request(
         MAILERCLOUD_URL, data=json.dumps(payload).encode(), method="POST",
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
+        headers={"Authorization": api_key, "Content-Type": "application/json", "Accept": "application/json",
+                 "User-Agent": "TripjackCertificationV3/1.0"},  # Cloudflare blocks the default Python-urllib agent
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as res:
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as res:
             print(f"[cert-mail] mailercloud {res.status}: {res.read(300).decode('utf-8', 'replace')}", flush=True)
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Mailercloud HTTP {e.code}: {e.read(500).decode('utf-8', 'replace')}") from None
