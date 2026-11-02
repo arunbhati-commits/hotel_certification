@@ -206,7 +206,7 @@ function renderErrorReport() {
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   if (!groups.length) {
     const mail = lastResults && lastResults.payload && lastResults.payload.certification_mail;
-    const next = mail === "sent" ? "The Tripjack certification team has been informed and will contact you."
+    const next = mail === "sent" && lastResults.payload.certified ? "The Tripjack certification team has been informed and will contact you."
       : "You are ready to submit for certification.";
     $("errorReport").innerHTML = `<div class="er-ok"><div class="er-ok-icon">✓</div><div><b>No errors found.</b><br>All 14 test cases passed. ${next}</div></div>`;
     return;

@@ -223,14 +223,16 @@ def send_certification_mail(partner: dict, result: dict) -> str:
     when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
 
     msg = EmailMessage()
-    msg["Subject"] = f"Hotel V3 certification passed - {partner.get('company') or 'Unknown company'}"
+    summary = result.get("summary", {})
+    outcome = "passed" if all_cases_passed(result) else f"{summary.get('passed', 0)}/{len(CERT_CASES)} passed"
+    msg["Subject"] = f"Hotel V3 certification {outcome} - {partner.get('company') or 'Unknown company'}"
     msg["From"] = os.environ.get("MAIL_FROM", user)
     msg["To"] = to
     if partner.get("email"):
         msg["Reply-To"] = partner["email"]
     cases = sorted(result.get("results", []), key=lambda r: _case_number(str(r.get("case", ""))) or 99)
     msg.set_content(
-        "A partner has passed all 14 Hotel API V3 UAT test cases on the Tripjack Certification V3 Hotel checker.\n\n"
+        f"A partner uploaded Hotel API V3 UAT test cases on the Tripjack Certification V3 Hotel checker: {outcome}.\n\n"
         f"Name         : {partner.get('name', '')}\n"
         f"Company      : {partner.get('company', '')}\n"
         f"TJ user ID   : {partner.get('tjUserId', '')}\n"
@@ -561,8 +563,8 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 result["source_folder"] = parts[0] if files else "uploaded"
                 result["partner"] = partner
                 result["certified"] = all_cases_passed(result)
-                if result["certified"]:
-                    result["certification_mail"] = send_certification_mail(partner, result)
+                # For now mail on every upload; to mail only on 14/14, wrap this in `if result["certified"]:`
+                result["certification_mail"] = send_certification_mail(partner, result)
                 summary = result["summary"]
                 print("[upload] " + json.dumps({**partner, "passed": summary.get("passed"), "failed": summary.get("failed")}), flush=True)
                 self._send_json(200, result)

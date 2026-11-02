@@ -32,7 +32,7 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 
 ## Certification email
 
-When an upload passes all 14 test cases, the server emails the partner's form details (name, company,
+After every upload (for now; the 14/14 condition is switched off) the server emails the partner's form details (name, company,
 TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`. Set these environment variables
 (Vercel: Project → Settings → Environment Variables, then redeploy):
 
