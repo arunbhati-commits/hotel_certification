@@ -441,7 +441,9 @@ function uploadFolder(files) {
     return !BINARY_EXTS.has(ext);
   });
   if (!usable.length) return showStatus("No usable files found in that folder.", true);
+  if (!partner) return showStatus("Please fill in your details first.", true);
   const form = new FormData();
+  Object.entries(partner).forEach(([k, v]) => form.append(k, v));
   usable.forEach((f) => form.append("files", f, f._relPath || f.webkitRelativePath || f.name));
   send("/api/upload_folder", { method: "POST", body: form }, `Checking ${usable.length} files…`,
     (usable[0]._relPath || usable[0].webkitRelativePath || "").split("/")[0] || "your folder");
@@ -472,7 +474,7 @@ function downloadErrorReport() {
     rows.push([g.name, g.m.tc.desc, g.m.state === "missing" ? "NOT UPLOADED" : "FAIL", i + 1, it.problem, it.fix])));
   lastResults.model.filter((m) => m.state === "pass").forEach((m) =>
     rows.push([m.tc.n ? `Test Case ${m.tc.n}` : m.tc.title, m.tc.desc, "PASS", "", "No errors", ""]));
-  saveCsv(rows, "hotel_certification_errors");
+  saveCsv([...partnerRows(), ...rows], "hotel_certification_errors");
 }
 
 // Detailed report: one row per check (problem / note / passed) for every test case
@@ -509,8 +511,69 @@ function downloadReport() {
     row.findings.filter((f) => f.severity === "INFO").forEach((f) => add("PASSED", f));
   });
 
-  saveCsv(rows, "hotel_certification_report");
+  saveCsv([...partnerRows(), ...rows], "hotel_certification_report");
 }
+
+// ---- Partner details: filled in once before the upload ----
+const DETAIL_FIELDS = [
+  ["name", "Full name"], ["company", "Company name"], ["tjUserId", "TJ user ID"], ["phone", "Phone number"], ["email", "Email ID"],
+];
+let partner = null;
+
+function checkDetails(d) {
+  const bad = {};
+  if (d.name.length < 2) bad.name = "Enter your full name.";
+  if (d.company.length < 2) bad.company = "Enter your company name.";
+  if (!/^[A-Za-z0-9._-]{3,40}$/.test(d.tjUserId)) bad.tjUserId = "Enter a valid TJ user ID (letters and numbers only).";
+  const digits = d.phone.replace(/[\s()-]/g, "").replace(/^(\+91|0091|0)/, "");
+  if (!/^[6-9]\d{9}$/.test(digits)) bad.phone = "Enter a valid 10-digit mobile number.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) bad.email = "Enter a valid email ID.";
+  return bad;
+}
+
+function showPartner() {
+  const on = !!partner;
+  $("detailsSection").classList.toggle("hidden", on);
+  $("whoBar").classList.toggle("hidden", !on);
+  $("dropZone").classList.toggle("hidden", !on);
+  if (on) $("whoText").innerHTML = `Uploading as <b>${esc(partner.name)}</b> · ${esc(partner.company)} <span>· TJ ID ${esc(partner.tjUserId)} · ${esc(partner.phone)} · ${esc(partner.email)}</span>`;
+}
+
+function partnerRows() {
+  if (!partner) return [];
+  return [...DETAIL_FIELDS.map(([k, label]) => [label, partner[k]]), ["Checked on", new Date().toLocaleString()], []];
+}
+
+$("detailsForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const d = {};
+  DETAIL_FIELDS.forEach(([k]) => { d[k] = form.elements[k].value.trim(); });
+  const bad = checkDetails(d);
+  DETAIL_FIELDS.forEach(([k]) => form.elements[k].classList.toggle("invalid", !!bad[k]));
+  const msgs = Object.values(bad);
+  $("detailsError").textContent = msgs.join(" ");
+  $("detailsError").classList.toggle("hidden", !msgs.length);
+  if (msgs.length) { form.elements[Object.keys(bad)[0]].focus(); return; }
+  partner = d;
+  try { localStorage.setItem("tjPartner", JSON.stringify(d)); } catch (_) {}
+  showPartner();
+  $("dropZone").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("editDetails").addEventListener("click", () => {
+  const form = $("detailsForm");
+  DETAIL_FIELDS.forEach(([k]) => { form.elements[k].value = partner ? partner[k] : ""; });
+  partner = null;
+  showPartner();
+  form.elements.name.focus();
+});
+
+try {
+  const saved = JSON.parse(localStorage.getItem("tjPartner") || "null");
+  if (saved && !Object.keys(checkDetails(saved)).length) partner = saved;
+} catch (_) {}
+showPartner();
 
 // Explain the browser's own "Upload N files?" prompt before it appears
 const openFolderModal = () => { $("folderModal").classList.remove("hidden"); $("fmGo").focus(); };

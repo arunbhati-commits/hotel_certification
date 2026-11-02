@@ -108,8 +108,9 @@ def find_test_cases_root(base_dir: Path) -> Path | None:
     return None
 
 
-def _parse_multipart(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
-    """Parse multipart/form-data. Returns list of (relative_path, content)."""
+def _parse_multipart(content_type: str, body: bytes, fields: dict | None = None) -> list[tuple[str, bytes]]:
+    """Parse multipart/form-data. Returns list of (relative_path, content).
+    Plain text fields (no filename) are stored in `fields` when it is given."""
     boundary = None
     for part in content_type.split(';'):
         part = part.strip()
@@ -135,6 +136,7 @@ def _parse_multipart(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
 
         header_str = header_bytes.decode('utf-8', errors='replace')
         filename = None
+        field_name = None
         for line in header_str.splitlines():
             line = line.strip()
             if line.lower().startswith('content-disposition:'):
@@ -142,9 +144,12 @@ def _parse_multipart(content_type: str, body: bytes) -> list[tuple[str, bytes]]:
                     token = token.strip()
                     if token.lower().startswith('filename='):
                         filename = token[9:].strip('"').strip("'")
-                        break
+                    elif token.lower().startswith('name='):
+                        field_name = token[5:].strip('"').strip("'")
         if filename:
             files.append((filename, content))
+        elif field_name and fields is not None:
+            fields[field_name] = content.decode('utf-8', errors='replace').strip()[:200]
     return files
 
 
@@ -401,7 +406,9 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 return
 
             body = self.rfile.read(content_length)
-            files = _parse_multipart(content_type, body)
+            fields: dict = {}
+            files = _parse_multipart(content_type, body, fields)
+            partner = {k: fields.get(k, "") for k in ("name", "company", "tjUserId", "phone", "email")}
 
             if not files:
                 self._send_json(400, {"error": "No files parsed from upload. Ensure the folder contains JSON files."})
@@ -478,6 +485,9 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 print(f"[folder-upload] audit complete — {result['summary']['cases']} case(s) in response")
                 result["session_id"] = session_id
                 result["source_folder"] = parts[0] if files else "uploaded"
+                result["partner"] = partner
+                summary = result["summary"]
+                print("[upload] " + json.dumps({**partner, "passed": summary.get("passed"), "failed": summary.get("failed")}), flush=True)
                 self._send_json(200, result)
 
             except Exception as e:

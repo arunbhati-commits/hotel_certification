@@ -272,3 +272,25 @@ h2 { font-size: 18px; margin: 0; }
 .sample-text span { color: var(--muted); }
 .sample-box .btn { flex: none; text-decoration: none; }
 @media (max-width: 560px) { .sample-box { flex-wrap: wrap; } .sample-box .btn { width: 100%; text-align: center; } }
+
+/* ---- Partner details form ---- */
+.details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px 20px 22px; margin-bottom: 20px; text-align: center; }
+.details-form { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; text-align: left; }
+.details-form label { display: grid; gap: 5px; font-size: 13.5px; font-weight: 600; }
+.details-form input { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text); }
+.details-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.details-form input.invalid { border-color: var(--fail); background: var(--fail-bg); }
+.details-form .full { grid-column: 1 / -1; }
+.form-error { margin: 0; padding: 9px 12px; border-radius: 10px; background: var(--fail-bg); color: var(--fail); font-size: 13.5px; }
+.form-actions { text-align: center; margin-top: 4px; }
+.form-actions .btn { min-width: 260px; }
+.who { display: flex; align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font-size: 13.5px; }
+.who-icon { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-bg); display: grid; place-items: center; }
+.who-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.who-text span { color: var(--muted); }
+@media (max-width: 560px) {
+  .details-form { grid-template-columns: 1fr; }
+  .form-actions .btn { width: 100%; min-width: 0; }
+  .who { flex-wrap: wrap; }
+  .who .btn { width: 100%; }
+}

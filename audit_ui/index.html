@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tripjack Certification V3 Hotel</title>
-  <link rel="stylesheet" href="styles.css?v=24" />
+  <link rel="stylesheet" href="styles.css?v=25" />
 </head>
 <body>
   <header class="topbar">
@@ -19,12 +19,33 @@
 
   <main class="wrap">
     <ol class="steps">
-      <li><span class="step-n">1</span><div><b>Prepare</b><span>One folder per test case (Test Case 1 … Test Case 14) with the request &amp; response files.</span></div></li>
-      <li><span class="step-n">2</span><div><b>Upload</b><span>Choose or drag your main folder. The checks run straight away.</span></div></li>
+      <li><span class="step-n">1</span><div><b>Your details</b><span>Fill in your name, company, TJ user ID, phone and email.</span></div></li>
+      <li><span class="step-n">2</span><div><b>Upload</b><span>Choose or drag your main folder (Test Case 1 … Test Case 14). The checks run straight away.</span></div></li>
       <li><span class="step-n">3</span><div><b>Fix &amp; download</b><span>Fix anything marked in red, then download the Excel report.</span></div></li>
     </ol>
 
-    <section class="upload" id="dropZone">
+    <section class="details" id="detailsSection">
+      <div class="upload-icon">👤</div>
+      <h2>Your details</h2>
+      <p class="hint">Fill this in once before you upload. Fields marked * are required.</p>
+      <form id="detailsForm" class="details-form" novalidate>
+        <label>Full name *<input name="name" autocomplete="name" maxlength="80" required /></label>
+        <label>Company name *<input name="company" autocomplete="organization" maxlength="120" required /></label>
+        <label>TJ user ID *<input name="tjUserId" maxlength="40" placeholder="Your Tripjack user ID" required /></label>
+        <label>Phone number *<input name="phone" type="tel" autocomplete="tel" maxlength="20" placeholder="10-digit mobile number" required /></label>
+        <label class="full">Email ID *<input name="email" type="email" autocomplete="email" maxlength="120" placeholder="name@company.com" required /></label>
+        <p id="detailsError" class="form-error full hidden"></p>
+        <div class="full form-actions"><button type="submit" class="btn primary">Submit &amp; continue to upload →</button></div>
+      </form>
+    </section>
+
+    <div id="whoBar" class="who hidden">
+      <span class="who-icon">👤</span>
+      <div class="who-text" id="whoText"></div>
+      <button type="button" id="editDetails" class="btn">Edit details</button>
+    </div>
+
+    <section class="upload hidden" id="dropZone">
       <div class="upload-icon">⬆</div>
       <h2>Upload your test cases</h2>
       <p class="hint"><b>Drag &amp; drop your test case folder here</b>, or choose it below. Files are used only to run the checks.</p>
@@ -121,6 +142,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>
