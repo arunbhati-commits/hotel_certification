@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tripjack Certification V3 Hotel</title>
+  <link rel="stylesheet" href="styles.css?v=21" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="logo">✓</div>
+      <div>
+        <h1>Tripjack Certification V3 – Hotel <span class="brand-tag">UAT</span></h1>
+        <p class="subtitle">Check your Hotel API V3 UAT test cases before you submit them to Tripjack for certification.</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <ol class="steps">
+      <li><span class="step-n">1</span><div><b>Prepare</b><span>One folder per test case (Test Case 1 … Test Case 14) with the request &amp; response files.</span></div></li>
+      <li><span class="step-n">2</span><div><b>Upload</b><span>Choose or drag your main folder. The checks run straight away.</span></div></li>
+      <li><span class="step-n">3</span><div><b>Fix &amp; download</b><span>Fix anything marked in red, then download the Excel report.</span></div></li>
+    </ol>
+
+    <section class="upload" id="dropZone">
+      <div class="upload-icon">⬆</div>
+      <h2>Upload your test cases</h2>
+      <p class="hint"><b>Drag &amp; drop your test case folder here</b>, or choose it below. Files are used only to run the checks.</p>
+      <p class="unzip-note">📦 Have a ZIP file? <b>Unzip it first</b>, then upload the folder. ZIP files are not accepted.</p>
+      <div class="upload-actions">
+        <button type="button" id="folderBtn" class="btn primary">📁 Choose folder</button>
+      </div>
+      <input type="file" id="folderInput" webkitdirectory multiple hidden />
+      <div id="status" class="status hidden"></div>
+
+      <details class="tips">
+        <summary>What should each test case folder contain?</summary>
+        <ul>
+          <li>Search, Detail and Review request + response.</li>
+          <li>Hold and/or Book request + response (and Confirm Hold if you held first).</li>
+          <li><b>Every booking must have a Booking Detail call</b>: after booking, add the Booking Detail request + response with the updated status.</li>
+          <li>For cancel cases: Cancel request + response, then <b>call Booking Detail again so it shows the updated status (CANCELLED)</b>.</li>
+          <li>Test Case 14: the Booking Detail response of <b>every</b> test booking showing CANCELLED.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section id="overview" class="overview hidden">
+      <div class="ov-head">
+        <div>
+          <div id="source" class="source"></div>
+          <div class="progress-label"><b id="progressText">0 of 14</b> test cases passed</div>
+        </div>
+        <div class="dl">
+          <button type="button" id="downloadBtn" class="btn primary">⬇ Download error report</button>
+          <button type="button" id="downloadFullBtn" class="btn">Detailed report</button>
+        </div>
+      </div>
+      <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+    </section>
+
+    <div id="viewTabs" class="vtabs hidden">
+      <button type="button" class="vtab active" data-view="errors">❗ Error report</button>
+      <button type="button" class="vtab" data-view="cases">All test cases</button>
+    </div>
+
+    <section id="errorView" class="results hidden">
+      <h2>Error report</h2>
+      <p class="er-intro">Only what is wrong and how to fix it.</p>
+      <div id="errorReport"></div>
+    </section>
+
+    <section id="casesView" class="results">
+      <div class="results-head">
+        <h2>Test cases</h2>
+        <div class="filters" id="filters">
+          <button type="button" class="filter active" data-filter="all">All <span id="nAll">14</span></button>
+          <button type="button" class="filter pass" data-filter="pass">Passed <span id="nPass">0</span></button>
+          <button type="button" class="filter fail" data-filter="fail">Failed <span id="nFail">0</span></button>
+          <button type="button" class="filter missing" data-filter="missing">Not uploaded <span id="nMissing">0</span></button>
+        </div>
+      </div>
+      <div id="cases"></div>
+      <p id="emptyFilter" class="empty hidden">No test cases in this filter.</p>
+    </section>
+  </main>
+
+  <div id="folderModal" class="modal center hidden">
+    <div class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="fmTitle">
+      <div class="confirm-icon">📁</div>
+      <h3 id="fmTitle">Upload your test case folder</h3>
+      <p class="confirm-text">Pick the <b>main folder</b> that holds Test Case 1 … Test Case 14.<br>If you have a ZIP file, <b>unzip it first</b> and choose the unzipped folder.</p>
+      <div class="confirm-steps">
+        <div class="cstep"><span>1</span><div>Select the folder in the window that opens and click <b>Upload</b> / <b>Select</b>.</div></div>
+        <div class="cstep"><span>2</span><div>Your browser then asks <i>“Upload N files to this site?”</i>. Click <b>Upload</b>.</div></div>
+      </div>
+      <div class="confirm-note">🔒 This browser prompt is normal. Your files are used only to run the checks and are deleted afterwards.</div>
+      <div class="confirm-tip">Tip: drag the folder onto the upload box instead to skip the browser prompt.</div>
+      <div class="confirm-actions">
+        <button type="button" id="fmCancel" class="btn">Cancel</button>
+        <button type="button" id="fmGo" class="btn primary">Choose folder</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="modalTitle"></h3><button type="button" id="modalClose" class="x" aria-label="Close">&times;</button></div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js?v=21"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+# Tripjack Certification V3 – Hotel
+
+A local web tool that checks Hotel API V3 UAT test cases before they are submitted to Tripjack
+for certification. Partners upload their test-case folder and get, for each of the 14
+certification test cases, a PASS / FAIL result, a plain-language list of errors with how to fix
+them, and a downloadable Excel (CSV) report.
+
+## Run
+
+Needs Python 3.10+ (standard library only, nothing to install).
+
+```bash
+./run.sh            # http://127.0.0.1:8765, opens the browser
+./run.sh 9000       # another port
+HOST=0.0.0.0 ./run.sh   # reachable from other machines on the network
+```
+
+Command-line check without the UI:
+
+```bash
+python3 validate_hotel_test_cases.py --root "/path/to/test cases"
+python3 validate_hotel_test_cases.py --root "/path/to/test cases" --case "Test Case 4" --json-report report.json
+```
+
+## Expected upload
+
+One sub-folder per test case (`Test Case 1` … `Test Case 14`), each with the request and
+response JSON for Search, Detail, Review, Hold / Book (and Confirm Hold), Booking Detail, and
+Cancel where applicable. ZIP files must be unzipped first.
+
+- Every booking needs a Booking Detail request + response with the updated status.
+- Cancel cases need a second Booking Detail showing `CANCELLED`.
+- Test Case 14 must contain the Booking Detail response of every test booking showing `CANCELLED`.
+
+## What is checked
+
+correlationId, dates / nationality / currency, room setup, hotel ID chain, reviewHash, optionId,
+room / price consistency, guests per room, PAN / passport, payment amount, the room and guest
+requirement of each test case, booking status, cancellation of every test booking, and invalid
+JSON (with line and column).
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `validate_hotel_test_cases.py` | Validation engine and CLI |
+| `audit_ui_server.py` | Local web server (folder upload, runs the validator) |
+| `audit_ui/` | Web UI (HTML, CSS, JS) |
+| `run.sh` | Starts the server |
+
+Uploaded files are written to a temporary folder only for the check and deleted right after.

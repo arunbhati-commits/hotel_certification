@@ -1,0 +1,11 @@
+# Only the checker's code goes to git. Everything else (UAT captures with PAN / passport
+# numbers, ZIPs, reports, old notes) stays local.
+/*
+!/.gitignore
+!/README.md
+!/run.sh
+!/validate_hotel_test_cases.py
+!/audit_ui_server.py
+!/audit_ui/
+__pycache__/
+.DS_Store
