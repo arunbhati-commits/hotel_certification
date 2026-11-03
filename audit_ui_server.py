@@ -266,6 +266,27 @@ def _send_via_webhook(url: str, partner: dict, outcome: str, to: str, subject: s
         raise RuntimeError(f"webhook replied: {body}")
 
 
+GROUNDMAIL_URL = "https://api.groundmail.dev/emails"
+GROUNDMAIL_SANDBOX_FROM = "noreply@mail.groundmail.dev"  # no domain needed; only delivers to the account's own email
+
+
+def _send_via_groundmail(api_key: str, sender: str, to: str, subject: str, text: str) -> None:
+    payload = {
+        "from": sender, "to": to, "subject": subject, "text": text,
+        "html": "<pre style=\"font-family:Menlo,Consolas,monospace;font-size:13px\">" + html.escape(text) + "</pre>",
+    }
+    req = urllib.request.Request(
+        GROUNDMAIL_URL, data=json.dumps(payload).encode(), method="POST",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                 "User-Agent": "TripjackCertificationV3/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as res:
+            print(f"[cert-mail] groundmail {res.status}: {res.read(300).decode('utf-8', 'replace')}", flush=True)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Groundmail HTTP {e.code}: {e.read(500).decode('utf-8', 'replace')}") from None
+
+
 def _send_via_smtp(host: str, user: str, password: str, sender: str, to: str, reply_to: str, subject: str, text: str) -> None:
     port = int(os.environ.get("SMTP_PORT", "587"))
     msg = EmailMessage()
@@ -292,12 +313,13 @@ def send_certification_mail(partner: dict, result: dict) -> str:
     (SMTP_HOST, SMTP_USER, SMTP_PASS, optional SMTP_PORT / MAIL_FROM). CERT_NOTIFY_TO overrides the recipient.
     Returns "sent", "not_configured" or "failed"."""
     webhook = os.environ.get("CERT_WEBHOOK_URL")
+    groundmail_key = os.environ.get("GROUNDMAIL_API_KEY")
     api_key = os.environ.get("MAILERCLOUD_API_KEY")
     host, user, password = (os.environ.get(k) for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS"))
     sender = os.environ.get("MAIL_FROM") or user
     use_api = bool(api_key and sender)
-    if not webhook and not use_api and not (host and user and password):
-        print("[cert-mail] mail not configured (set CERT_WEBHOOK_URL, MAILERCLOUD_API_KEY + MAIL_FROM, or SMTP_*); mail not sent", flush=True)
+    if not webhook and not groundmail_key and not use_api and not (host and user and password):
+        print("[cert-mail] mail not configured (set GROUNDMAIL_API_KEY, CERT_WEBHOOK_URL, MAILERCLOUD_API_KEY + MAIL_FROM, or SMTP_*); mail not sent", flush=True)
         return "not_configured"
     to = os.environ.get("CERT_NOTIFY_TO", CERT_NOTIFY_TO)
     when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
@@ -319,7 +341,10 @@ def send_certification_mail(partner: dict, result: dict) -> str:
     )
     reply_to = partner.get("email", "")
     try:
-        if webhook:
+        if groundmail_key:
+            _send_via_groundmail(groundmail_key, os.environ.get("MAIL_FROM") or GROUNDMAIL_SANDBOX_FROM, to, subject, text)
+            via = "groundmail"
+        elif webhook:
             _send_via_webhook(webhook, partner, outcome, to, subject, text)
             via = "apps-script"
         elif use_api:

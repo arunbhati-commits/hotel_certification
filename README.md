@@ -35,6 +35,10 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 After every upload (for now; the 14/14 condition is switched off) the server emails the partner's form details (name, company,
 TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`.
 
+**Groundmail (simplest, free):** set `GROUNDMAIL_API_KEY` (starts with `gm_`). Without a verified domain it sends
+from `noreply@mail.groundmail.dev` and only to the Groundmail account's own email, so sign up with the address
+in `CERT_NOTIFY_TO`. Free plan: about 3,000 emails/month, 100/day.
+
 **Google Apps Script (no SMTP, no DNS):** deploy `tools/apps_script_mailer.gs` as a web app from your Google
 account (Execute as: Me, Access: Anyone) and set `CERT_WEBHOOK_URL` to its `/exec` URL. It emails from your
 Gmail and logs each upload to a Google Sheet.
