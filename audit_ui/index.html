@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tripjack Certification V3 Hotel</title>
-  <link rel="stylesheet" href="styles.css?v=34" />
+  <link rel="stylesheet" href="styles.css?v=35" />
 </head>
 <body>
   <header class="topbar">
@@ -50,8 +50,8 @@
 
     <section class="details" id="detailsSection">
       <div class="upload-icon">👤</div>
-      <h2>Your details</h2>
-      <p class="hint">Fill this in once before you upload. Fields marked * are required.</p>
+      <h2 id="detailsTitle">Your details</h2>
+      <p class="hint" id="detailsHint">Fill this in once before you upload. Fields marked * are required.</p>
       <form id="detailsForm" class="details-form" novalidate>
         <label>Full name *<input name="name" autocomplete="name" maxlength="80" required /></label>
         <label>Company name *<input name="company" autocomplete="organization" maxlength="120" required /></label>
@@ -59,7 +59,7 @@
         <label>Phone number *<input name="phone" type="tel" autocomplete="tel" maxlength="20" placeholder="10-digit mobile number" required /></label>
         <label class="full">Email ID *<input name="email" type="email" autocomplete="email" maxlength="120" placeholder="name@company.com" required /></label>
         <p id="detailsError" class="form-error full hidden"></p>
-        <div class="full form-actions"><button type="submit" class="btn primary">Submit &amp; continue to upload →</button></div>
+        <div class="full form-actions"><button type="submit" id="detailsSubmit" class="btn primary">Submit &amp; continue to upload →</button></div>
       </form>
     </section>
 
@@ -168,6 +168,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=34"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>

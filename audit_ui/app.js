@@ -585,8 +585,19 @@ function checkDetails(d) {
   return bad;
 }
 
+let editingDetails = false;
+
+// Without Google/Microsoft sign-in, the details form is the sign-in page:
+// until it is submitted, only the form is shown (no upload box or results).
 function showPartner() {
   const on = !!partner;
+  const signedOut = !on && !authUser && !editingDetails;
+  document.body.classList.toggle("signed-out", signedOut);
+  $("detailsTitle").textContent = signedOut ? "Sign in to continue" : "Your details";
+  $("detailsHint").textContent = signedOut
+    ? "Enter your details to start checking your Hotel API V3 UAT test cases. Fields marked * are required."
+    : "Fill this in once before you upload. Fields marked * are required.";
+  $("detailsSubmit").textContent = signedOut ? "Sign in →" : "Submit & continue to upload →";
   $("detailsSection").classList.toggle("hidden", on);
   $("whoBar").classList.toggle("hidden", !on);
   $("dropZone").classList.toggle("hidden", !on);
@@ -596,7 +607,8 @@ function showPartner() {
 
 // Top-bar account chip with Log out: shown when signed in, or once details are submitted
 function updateUserChip() {
-  const who = authUser ? authUser.email : partner ? partner.email : "";
+  const saved = (() => { try { return JSON.parse(localStorage.getItem("tjPartner") || "null"); } catch (_) { return null; } })();
+  const who = authUser ? authUser.email : partner ? partner.email : editingDetails && saved ? saved.email : "";
   $("userEmail").textContent = who;
   $("userChip").classList.toggle("hidden", !who);
 }
@@ -618,6 +630,7 @@ $("detailsForm").addEventListener("submit", (e) => {
   $("detailsError").classList.toggle("hidden", !msgs.length);
   if (msgs.length) { form.elements[Object.keys(bad)[0]].focus(); return; }
   partner = d;
+  editingDetails = false;
   try { localStorage.setItem("tjPartner", JSON.stringify(d)); } catch (_) {}
   showPartner();
   $("dropZone").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -627,6 +640,7 @@ $("editDetails").addEventListener("click", () => {
   const form = $("detailsForm");
   DETAIL_FIELDS.forEach(([k]) => { form.elements[k].value = partner ? partner[k] : ""; });
   partner = null;
+  editingDetails = true;
   showPartner();
   form.elements.name.focus();
 });
