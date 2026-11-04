@@ -101,6 +101,7 @@ TEST_CASE_SPECS: dict[str, dict] = {
         "children": [1, 0],
         "requires_pan": True,
         "same_pan_across_rooms": True,
+        "indian_only": True,
     },
     "Test Case 11": {
         "desc": "Same PAN for all guests (Create a booking using the same PAN for all guests)",
@@ -110,6 +111,7 @@ TEST_CASE_SPECS: dict[str, dict] = {
         "children": [1],
         "requires_pan": True,
         "same_pan_for_all_guests": True,
+        "indian_only": True,
     },
     "Test Case 12": {
         "desc": "Booking using PASSPORT (Create a booking by selecting a non-Indian nationality and using a valid Passport number)",
@@ -1485,22 +1487,41 @@ def validate_test_case_spec(case_dir: Path, result: CaseResult, detail_req: dict
         else:
             result.add("WARN", "TEST_CASE_SPEC", "Non-Indian nationality booking should not include PAN, but PAN found")
 
-    # TC 10: same PAN across all rooms
-    if spec.get("same_pan_across_rooms"):
-        rooms_with_pan = sum(1 for r in actual_trav if r.get("hasPan"))
-        if rooms_with_pan == expected_rooms:
-            result.add("INFO", "TEST_CASE_SPEC",
-                f"Same PAN across all {expected_rooms} rooms — PAN present in every room")
-        else:
-            result.add("WARN", "TEST_CASE_SPEC",
-                f"Same PAN across rooms required — PAN found in {rooms_with_pan} of {expected_rooms} rooms")
-
-    # TC 11: same PAN for all guests
-    if spec.get("same_pan_for_all_guests"):
-        total_guests = sum(r.get("adults", 0) + r.get("children", 0) for r in actual_trav)
-        if has_pan:
-            result.add("INFO", "TEST_CASE_SPEC",
-                f"Same PAN for all {total_guests} guests — PAN present in booking request")
+    # TC 10 / TC 11: one PAN for the whole booking
+    across_rooms = spec.get("same_pan_across_rooms")
+    all_guests = spec.get("same_pan_for_all_guests")
+    if (across_rooms or all_guests) and traveller_source:
+        rti = traveller_source.get("roomTravellerInfo") or _deep_find(traveller_source, "roomTravellerInfo") or []
+        rooms = [r.get("travellerInfo") or [] for r in rti if isinstance(r, dict)]
+        pans: dict[str, list[str]] = {}
+        missing: list[str] = []
+        for ri, guests in enumerate(rooms, 1):
+            adults = [g for g in guests if isinstance(g, dict) and str(g.get("pt", "ADULT")).upper() == "ADULT"]
+            lead = next((g for g in adults if g.get("isLeadGuest")), adults[0] if adults else None)
+            # TC10: lead guest of every room needs the PAN; TC11: every adult guest needs it
+            must = adults if all_guests else ([lead] if lead else [])
+            for gi, g in enumerate(guests, 1):
+                if not isinstance(g, dict):
+                    continue
+                who = f"Room {ri} Guest {gi} ({g.get('fN', '')} {g.get('lN', '')}".rstrip() + ")"
+                pan = str(g.get("pan") or "").strip().upper()
+                if pan:
+                    pans.setdefault(pan, []).append(who)
+                elif any(g is m for m in must):
+                    missing.append(who + (" - lead guest" if g is lead else ""))
+        scope = "every room's lead guest" if across_rooms else "every adult guest"
+        bad_format = [p for p in pans if not re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", p)]
+        if missing:
+            result.add("ERROR", "SAME_PAN", f"PAN missing for: {', '.join(missing)} (Book request must have the same PAN for {scope})")
+        if len(pans) > 1:
+            detail = " | ".join(f"{p}: {', '.join(w)}" for p, w in pans.items())
+            result.add("ERROR", "SAME_PAN", f"Different PANs used; one PAN is required for the whole booking: {detail}")
+        if bad_format:
+            result.add("ERROR", "SAME_PAN", f"Invalid PAN format: {', '.join(bad_format)} (expected AAAAA0000A)")
+        if not pans and not missing:
+            result.add("ERROR", "SAME_PAN", f"No PAN found in the Book request (needed for {scope})")
+        if pans and not missing and len(pans) == 1 and not bad_format:
+            result.add("INFO", "SAME_PAN", f"Same PAN {next(iter(pans))} used for {scope} ({sum(len(w) for w in pans.values())} guest(s))")
 
     # TC 13: corporate PAN
     if spec.get("corporate_pan") and has_pan:
@@ -2340,6 +2361,17 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             result.add("ERROR", "TIMEOUT_MS", f"{label} request: timeoutMs must be a positive number, got {tv!r}")
         else:
             result.add("INFO", "TIMEOUT_MS", f"{label} request: timeoutMs = {tv}")
+
+    # --- Indian-nationals-only cases (TC10, TC11): nationality must be 106 (India) ---
+    if _spec_for(case_dir.name).get("indian_only"):
+        for label, obj in (("Search", search_req), ("Detail", detail_req)):
+            if not obj:
+                continue
+            nat = obj.get("nationality") or _deep_find(obj, "nationality")
+            if str(nat or "").strip() != "106":
+                result.add("ERROR", "NATIONALITY", f"{label} request: nationality is {nat!r}; this test case is for Indian nationals only (106)")
+            else:
+                result.add("INFO", "NATIONALITY", f"{label} request: Indian nationality 106")
 
     # --- Non-Indian nationality cases (TC12): nationality must not be 106 (India) ---
     if _spec_for(case_dir.name).get("non_indian"):

@@ -10,8 +10,8 @@ const TEST_CASES = [
   { n: 8,  desc: "Instant booking", city: "International", adults: "3, 3", children: "0, 0", rooms: "2" },
   { n: 9,  desc: "Cancellation rules and policies are displayed in your application", infoOnly: true,
     note: "Policy-only case: a booking flow is not required, so missing booking files are not counted." },
-  { n: 10, desc: "Same PAN for all rooms", city: "Domestic / International", adults: "2, 2", children: "1, 0", rooms: "2", note: "Indian nationals only." },
-  { n: 11, desc: "Same PAN for all guests", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Indian nationals only." },
+  { n: 10, desc: "Same PAN for all rooms", city: "Domestic / International", adults: "2, 2", children: "1, 0", rooms: "2", note: "Indian nationals only (nationality 106). In the Book request, the lead guest of every room must have the same PAN (the lead guest's PAN)." },
+  { n: 11, desc: "Same PAN for all guests", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Indian nationals only (nationality 106). In the Book request, every adult guest must have the same PAN (the lead guest's PAN)." },
   { n: 12, desc: "Booking using PASSPORT", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Non-Indian nationality (any code except 106, which is India) with a valid passport number (if applicable). The Book request must contain a valid passport number for the guests." },
   { n: 13, desc: "Booking with corporate PAN", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Indian nationals only (if applicable). A corporate PAN (Permanent Account Number) follows the standard 10-character alphanumeric structure AAAAA0000A issued by the Income Tax Department of India, where the fourth character denotes the entity type as 'C' for Company." },
   { n: 14, desc: "Cancel all test bookings made during certification", infoOnly: true,
@@ -29,6 +29,7 @@ function bookingDetailNote(tc) {
 // Plain-language name and "what to do" for each check
 const RULES = {
   CORRELATION_ID: ["Correlation ID", "Use the same correlationId in the Search, Detail and Review requests."],
+  SAME_PAN: ["Same PAN", "Use one PAN for the whole booking: the lead guest of every room (TC10) or every adult guest (TC11) must carry the same PAN."],
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 100000."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
@@ -58,7 +59,25 @@ function explain(f) {
   const field = (name) => { const m = msg.match(new RegExp("^" + name + "\\s*:\\s*(.*)$", "mi")); return m ? m[1].replace(/\s*\[[^\]]*\]\s*$/, "").trim() : ""; };
   let m;
   switch (f.rule) {
+    case "SAME_PAN": {
+      if (/^PAN missing/.test(first)) return {
+        problem: `The Book request has no PAN for ${first.replace(/^PAN missing for: /, "").replace(/ \(Book request.*$/, "")}. This test case needs the same PAN for every guest listed.`,
+        fix: "Add the lead guest's PAN to each of these guests in the Book request (roomTravellerInfo → travellerInfo → pan). Use the same PAN for all of them." };
+      if (/^Different PANs/.test(first)) return {
+        problem: `Different PANs are used in the Book request (${first.split(": ").slice(1).join(": ")}). This test case needs one PAN for the whole booking.`,
+        fix: "Use the lead guest's PAN for all rooms/guests in the Book request, so every pan value is identical." };
+      if (/^Invalid PAN/.test(first)) return {
+        problem: `${first}.`,
+        fix: "A PAN has 10 characters: 5 letters, 4 digits, 1 letter (e.g. ABCPE1234F)." };
+      return { problem: "The Book request has no PAN. This test case needs the same PAN across the booking.",
+               fix: "Add the lead guest's PAN to the travellers in the Book request." };
+    }
     case "NATIONALITY": {
+      if (/Indian nationals only/.test(first)) {
+        const step = (first.match(/^(Search|Detail) request/) || [])[1] || "Search/Detail";
+        return { problem: `The ${step} request does not use nationality 106 (India). This test case is for Indian nationals only.`,
+                 fix: `Set "nationality": "106" in the Search and Detail requests.` };
+      }
       const step = (first.match(/^(Search|Detail) request/) || [])[1] || "Search/Detail";
       return /missing/.test(first)
         ? { problem: `The ${step} request has no nationality. This test case needs a non-Indian nationality.`,
