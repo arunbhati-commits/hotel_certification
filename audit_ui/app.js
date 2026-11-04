@@ -29,6 +29,7 @@ function bookingDetailNote(tc) {
 // Plain-language name and "what to do" for each check
 const RULES = {
   CORRELATION_ID: ["Correlation ID", "Use the same correlationId in the Search, Detail and Review requests."],
+  TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 100000."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
   SEARCH_DETAIL_DATES: ["Dates / nationality / currency", "Keep checkIn, checkOut, nationality and currency identical in Search and Detail."],
   ROOM_COMBO: ["Room setup", "Keep the rooms (adults, children, child ages) identical in Search and Detail."],
@@ -56,6 +57,12 @@ function explain(f) {
   const field = (name) => { const m = msg.match(new RegExp("^" + name + "\\s*:\\s*(.*)$", "mi")); return m ? m[1].replace(/\s*\[[^\]]*\]\s*$/, "").trim() : ""; };
   let m;
   switch (f.rule) {
+    case "TJ_HOTEL": {
+      const step = (first.match(/^(Search|Detail|Review) request/) || [])[1] || "a";
+      const ids = first.split(": ").pop();
+      return { problem: `The ${step} request uses a hotel that is not a TJ test hotel (${ids}). Only TJ test hotels, whose ID starts with 100000, are allowed; otherwise certification fails.`,
+               fix: `Search and book only TJ test hotels. Use hotel IDs that start with 100000 (e.g. 100000000991) in the Search, Detail and Review requests.` };
+    }
     case "TIMEOUT_MS": {
       const step = (first.match(/^(Search|Detail) request/) || [])[1] || "Search/Detail";
       return /missing/.test(first)

@@ -2340,6 +2340,24 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
         else:
             result.add("INFO", "TIMEOUT_MS", f"{label} request: timeoutMs = {tv}")
 
+    # --- Only TJ test hotels may be used: every hotel ID must start with 100000 ---
+    TJ_HOTEL_PREFIX = "100000"
+    for label, obj, keys in (("Search", search_req, ("hids", "hid", "hotelIds", "hotelId")),
+                             ("Detail", detail_req, ("hid", "hotelId", "id")),
+                             ("Review", review_req, ("hid", "hotelId"))):
+        if not obj:
+            continue
+        found = next((v for v in (_deep_find(obj, k) for k in keys) if v not in (None, "", [])), None)
+        if found is None:
+            continue  # absence is reported by HOTEL_ID / FILES
+        ids = [str(x).strip() for x in (found if isinstance(found, list) else [found])]
+        bad = [i for i in ids if not i.startswith(TJ_HOTEL_PREFIX)]
+        if bad:
+            shown = ", ".join(bad[:5]) + (f" (+{len(bad) - 5} more)" if len(bad) > 5 else "")
+            result.add("ERROR", "TJ_HOTEL", f"{label} request: not a TJ test hotel (must start with {TJ_HOTEL_PREFIX}): {shown}")
+        else:
+            result.add("INFO", "TJ_HOTEL", f"{label} request: TJ test hotel ID(s) OK ({ids[0]}{'…' if len(ids) > 1 else ''})")
+
     # --- dates & room combo (search vs detail) ---
     if search_req and detail_req:
         for field in ("checkIn", "checkOut", "nationality", "currency"):
