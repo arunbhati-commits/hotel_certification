@@ -591,6 +591,14 @@ function showPartner() {
   $("whoBar").classList.toggle("hidden", !on);
   $("dropZone").classList.toggle("hidden", !on);
   if (on) $("whoText").innerHTML = `Uploading as <b>${esc(partner.name)}</b> · ${esc(partner.company)} <span>· TJ ID ${esc(partner.tjUserId)} · ${esc(partner.phone)} · ${esc(partner.email)}</span>`;
+  updateUserChip();
+}
+
+// Top-bar account chip with Log out: shown when signed in, or once details are submitted
+function updateUserChip() {
+  const who = authUser ? authUser.email : partner ? partner.email : "";
+  $("userEmail").textContent = who;
+  $("userChip").classList.toggle("hidden", !who);
 }
 
 function partnerRows() {
@@ -696,14 +704,13 @@ function showLogin(cfg, error) {
 function showApp() {
   $("loginScreen").classList.add("hidden");
   $("appMain").classList.remove("hidden");
-  if (authUser) {
-    $("userEmail").textContent = authUser.email;
-    $("userChip").classList.remove("hidden");
-  }
   restorePartner();
 }
 
+// Log out: end the sign-in session and forget the saved details on this browser
 $("signOutBtn").addEventListener("click", async () => {
+  if (!confirm("Log out? Your saved details will be cleared from this browser.")) return;
+  try { localStorage.removeItem("tjPartner"); } catch (_) {}
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
   location.reload();
 });
