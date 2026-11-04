@@ -3,14 +3,39 @@
     {
       "src": "api/upload_folder.py",
       "use": "@vercel/python",
-      "config": { "includeFiles": ["audit_ui_server.py", "validate_hotel_test_cases.py"] }
+      "config": {
+        "includeFiles": [
+          "audit_ui_server.py",
+          "validate_hotel_test_cases.py",
+          "auth.py"
+        ]
+      }
     },
-    { "src": "audit_ui/**", "use": "@vercel/static" }
+    {
+      "src": "audit_ui/**",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/api/upload_folder", "dest": "/api/upload_folder.py" },
-    { "src": "/", "dest": "/audit_ui/index.html" },
-    { "src": "/(styles\\.css|app\\.js)", "dest": "/audit_ui/$1" },
-    { "src": "/sample/(.*)", "dest": "/audit_ui/sample/$1" }
+    {
+      "src": "/api/upload_folder",
+      "dest": "/api/upload_folder.py"
+    },
+    {
+      "src": "/api/(login|logout|me|config)",
+      "dest": "/api/upload_folder.py?__route=$1"
+    },
+    {
+      "src": "/",
+      "dest": "/audit_ui/index.html"
+    },
+    {
+      "src": "/(styles\\.css|app\\.js)",
+      "dest": "/audit_ui/$1"
+    },
+    {
+      "src": "/sample/(.*)",
+      "dest": "/audit_ui/sample/$1"
+    }
   ]
 }

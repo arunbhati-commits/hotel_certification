@@ -6,6 +6,7 @@
 !/run.sh
 !/validate_hotel_test_cases.py
 !/audit_ui_server.py
+!/auth.py
 !/audit_ui/
 __pycache__/
 .DS_Store

@@ -24,6 +24,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import auth
+
 ROOT = Path(__file__).resolve().parent
 UI_DIR = ROOT / "audit_ui"
 
@@ -347,7 +349,8 @@ def send_certification_mail(partner: dict, result: dict) -> str:
         f"Company      : {partner.get('company', '')}\n"
         f"TJ user ID   : {partner.get('tjUserId', '')}\n"
         f"Phone        : {partner.get('phone', '')}\n"
-        f"Email        : {partner.get('email', '')}\n"
+        f"Email        : {partner.get('email', '')}"
+        + (f"  (signed in with {partner['loginVia']})" if partner.get("loginVia") else "") + "\n"
         f"Checked on   : {when}\n"
         f"Folder       : {result.get('source_folder', '')}\n\n"
         "Results:\n" + "\n".join(f"  Test Case {n}: {status.get(n, 'NOT UPLOADED')}" for n in CERT_CASES) + "\n"
@@ -386,12 +389,16 @@ class AuditUIHandler(BaseHTTPRequestHandler):
         """Override to log errors without HTML output."""
         print(f"[audit-ui ERROR] {fmt % args}", file=sys.stderr)
 
-    def _send_json(self, code: int, payload: dict) -> None:
+    def _send_json(self, code: int, payload: dict, cookie: str | None = None) -> None:
         body = json.dumps(payload, indent=2).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        else:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
@@ -403,6 +410,50 @@ class AuditUIHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(data)
+
+    def _api_route(self) -> str:
+        """'login' for /api/login, also when Vercel rewrites it to /api/upload_folder.py?__route=login."""
+        parsed = urlparse(self.path)
+        route = (parse_qs(parsed.query).get("__route") or [""])[0]
+        return route or parsed.path.rstrip("/").rsplit("/", 1)[-1]
+
+    def _user(self) -> dict | None:
+        return auth.read_session(self.headers.get("Cookie"))
+
+    def _is_https(self) -> bool:
+        host = (self.headers.get("Host") or "").split(":")[0]
+        return self.headers.get("X-Forwarded-Proto") == "https" or host not in ("127.0.0.1", "localhost")
+
+    def _auth_get(self, route: str) -> bool:
+        if route == "config":
+            ids = auth.client_ids()
+            self._send_json(200, {"auth": auth.auth_enabled(), "google_client_id": ids["google"],
+                                  "microsoft_client_id": ids["microsoft"]})
+        elif route == "me":
+            user = self._user()
+            self._send_json(200 if user else 401, {"user": user} if user else {"error": "Not signed in"})
+        else:
+            return False
+        return True
+
+    def _auth_post(self, route: str) -> bool:
+        if route == "login":
+            try:
+                body = json.loads(self.rfile.read(min(self._get_content_length(), 20000)) or b"{}")
+                user = auth.verify_id_token(str(body.get("provider")), str(body.get("id_token", "")), str(body.get("nonce", "")))
+            except ValueError as e:
+                self._send_json(401, {"error": f"Sign-in failed: {e}"})
+                return True
+            except Exception as e:
+                self._send_json(502, {"error": f"Sign-in could not be checked: {e}"})
+                return True
+            print(f"[auth] signed in {user['email']} via {user['provider']}", flush=True)
+            self._send_json(200, {"user": user}, cookie=auth.session_cookie(auth.make_session(user), self._is_https()))
+        elif route == "logout":
+            self._send_json(200, {"ok": True}, cookie=auth.session_cookie("", self._is_https(), max_age=0))
+        else:
+            return False
+        return True
 
     def _get_content_length(self) -> int:
         try:
@@ -428,6 +479,9 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                     self._send_json(400, {"error": "Invalid session"})
             except Exception as e:
                 self._send_json(500, {"error": f"Cleanup failed: {str(e)}"})
+            return
+
+        if path.startswith("/api/") and self._auth_get(self._api_route()):
             return
 
         # Reject other API paths
@@ -466,12 +520,22 @@ class AuditUIHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
 
+            if path.startswith("/api/") and self._auth_post(self._api_route()):
+                return
+
             if path in ("/api/upload-folder", "/api/upload_folder", "/api/upload_folder.py"):
+                if auth.auth_enabled() and not self._user():
+                    self._send_json(401, {"error": "Please sign in again."})
+                    return
                 self._handle_folder_upload()
                 return
 
             if path != "/api/upload-zip":
                 self._send_json(404, {"error": "Not found"})
+                return
+
+            if auth.auth_enabled() and not self._user():
+                self._send_json(401, {"error": "Please sign in again."})
                 return
 
             content_length = self._get_content_length()
@@ -601,6 +665,10 @@ class AuditUIHandler(BaseHTTPRequestHandler):
             fields: dict = {}
             files = _parse_multipart(content_type, body, fields)
             partner = {k: fields.get(k, "") for k in ("name", "company", "tjUserId", "phone", "email")}
+            user = self._user()
+            if user:  # the signed-in account is the trusted identity
+                partner["email"] = user["email"]
+                partner["loginVia"] = user["provider"].title()
 
             if not files:
                 self._send_json(400, {"error": "No files parsed from upload. Ensure the folder contains JSON files."})

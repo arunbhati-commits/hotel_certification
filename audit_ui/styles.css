@@ -294,3 +294,27 @@ h2 { font-size: 18px; margin: 0; }
   .who { flex-wrap: wrap; }
   .who .btn { width: 100%; }
 }
+
+/* ---- Sign in ---- */
+.user-chip { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; border-radius: 999px; background: rgba(255,255,255,.18); color: #fff; font-size: 13px; min-width: 0; }
+.user-avatar { flex: none; }
+.user-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.btn.signout { padding: 5px 12px; font-size: 12.5px; border-radius: 999px; background: #fff; border-color: #fff; color: var(--accent-dark); }
+.login { min-height: calc(100vh - 110px); display: grid; place-items: center; padding: 32px 16px; }
+.login-card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 32px 28px 24px; text-align: center; box-shadow: 0 12px 32px rgba(154, 52, 18, .08); }
+.login-logo { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: var(--accent); color: #fff; font-size: 26px; font-weight: 700; display: grid; place-items: center; }
+.login-card h2 { margin: 0; font-size: 21px; }
+.login-sub { margin: 6px 0 22px; color: var(--muted); font-size: 14px; }
+.sso { display: grid; gap: 10px; }
+.sso-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px 14px; border: 1px solid #d6d9de; border-radius: 10px; background: #fff; color: #1f2937; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
+.sso-btn:hover { background: #fafafa; border-color: var(--accent); box-shadow: 0 2px 8px rgba(234, 88, 12, .12); }
+.sso-btn:disabled { opacity: .6; cursor: wait; }
+.sso-btn svg { width: 20px; height: 20px; flex: none; }
+.login .form-error { margin-top: 14px; text-align: left; }
+.login-note { margin: 18px 0 0; font-size: 12.5px; color: var(--muted); }
+.details-form input[readonly] { background: var(--bg); color: var(--muted); }
+@media (max-width: 560px) {
+  .topbar-in { flex-wrap: wrap; }
+  .user-chip { margin-left: 0; width: 100%; justify-content: space-between; }
+  .user-email { max-width: none; flex: 1; }
+}

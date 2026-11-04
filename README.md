@@ -30,6 +30,19 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 - `api/upload_folder.py` runs the same upload handler as the local server as a Python function.
 - Vercel limits a request body to about 4.5 MB, so very large test-case folders must be run locally with `./run.sh`.
 
+## Sign in (Google / Microsoft)
+
+Users sign in before they can upload. Sign-in is off until at least one client ID is set.
+
+| Variable | Where to get it |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth client ID → Web application. Authorised redirect URIs: `https://hotelcertification.vercel.app/` and `http://127.0.0.1:8765/` |
+| `MICROSOFT_CLIENT_ID` | Azure portal → App registrations → New registration. Supported accounts: any organisation + personal Microsoft accounts. Platform **Web**, redirect URIs as above, and tick **ID tokens** under Implicit grant |
+| `SESSION_SECRET` | Any long random string (e.g. `openssl rand -hex 32`). Required on Vercel |
+
+The server checks each sign-in token against Google's / Microsoft's public keys, then sets a signed,
+HttpOnly session cookie (12 hours). The signed-in email is used in the certification email.
+
 ## Certification email
 
 After every upload (for now; the 14/14 condition is switched off) the server emails the partner's form details (name, company,
@@ -82,6 +95,7 @@ JSON (with line and column).
 | File | Purpose |
 |---|---|
 | `validate_hotel_test_cases.py` | Validation engine and CLI |
+| `auth.py` | Google / Microsoft sign-in and session cookies |
 | `audit_ui_server.py` | Local web server (folder upload, runs the validator) |
 | `audit_ui/` | Web UI (HTML, CSS, JS) |
 | `run.sh` | Starts the server |

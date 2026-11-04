@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tripjack Certification V3 Hotel</title>
-  <link rel="stylesheet" href="styles.css?v=32" />
+  <link rel="stylesheet" href="styles.css?v=33" />
 </head>
 <body>
   <header class="topbar">
@@ -14,10 +14,34 @@
         <h1>Tripjack Certification V3 – Hotel <span class="brand-tag">UAT</span></h1>
         <p class="subtitle">Check your Hotel API V3 UAT test cases before you submit them to Tripjack for certification.</p>
       </div>
+      <div id="userChip" class="user-chip hidden">
+        <span class="user-avatar">👤</span><span id="userEmail" class="user-email"></span>
+        <button type="button" id="signOutBtn" class="btn signout">Sign out</button>
+      </div>
     </div>
   </header>
 
-  <main class="wrap">
+  <section id="loginScreen" class="login hidden">
+    <div class="login-card">
+      <div class="login-logo">✓</div>
+      <h2>Sign in to continue</h2>
+      <p class="login-sub">Sign in with your work account to check your Hotel API V3 UAT test cases.</p>
+      <div class="sso">
+        <button type="button" id="googleBtn" class="sso-btn hidden">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+          Continue with Google
+        </button>
+        <button type="button" id="microsoftBtn" class="sso-btn hidden">
+          <svg viewBox="0 0 23 23" aria-hidden="true"><path fill="#f25022" d="M1 1h10v10H1z"/><path fill="#7fba00" d="M12 1h10v10H12z"/><path fill="#00a4ef" d="M1 12h10v10H1z"/><path fill="#ffb900" d="M12 12h10v10H12z"/></svg>
+          Continue with Microsoft
+        </button>
+      </div>
+      <p id="loginError" class="form-error hidden"></p>
+      <p class="login-note">🔒 This site only receives your name and email address from the sign-in. Your password is never shared with it.</p>
+    </div>
+  </section>
+
+  <main class="wrap hidden" id="appMain">
     <ol class="steps">
       <li><span class="step-n">1</span><div><b>Your details</b><span>Fill in your name, company, TJ user ID, phone and email.</span></div></li>
       <li><span class="step-n">2</span><div><b>Upload</b><span>Choose or drag your main folder (Test Case 1 … Test Case 14). The checks run straight away.</span></div></li>
@@ -144,6 +168,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>

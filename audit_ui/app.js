@@ -464,6 +464,7 @@ async function send(url, options, busyMsg, sourceName) {
   try {
     const res = await fetch(url, options);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error("Your sign-in has expired. Refresh the page and sign in again.");
     if (res.status === 413) throw new Error("The folder is too large to upload (max about 4 MB). Remove files that are not test case requests/responses and try again.");
     if (!res.ok) throw new Error(data.error || res.statusText);
     lastResults = { payload: data };
@@ -622,11 +623,102 @@ $("editDetails").addEventListener("click", () => {
   form.elements.name.focus();
 });
 
-try {
-  const saved = JSON.parse(localStorage.getItem("tjPartner") || "null");
-  if (saved && !Object.keys(checkDetails(saved)).length) partner = saved;
-} catch (_) {}
-showPartner();
+// Saved details are reused only for the same signed-in account
+function restorePartner() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("tjPartner") || "null");
+    const sameUser = !authUser || (saved && saved.email === authUser.email);
+    if (saved && sameUser && !Object.keys(checkDetails(saved)).length) partner = saved;
+  } catch (_) {}
+  const form = $("detailsForm");
+  if (authUser) {
+    if (!form.elements.name.value) form.elements.name.value = authUser.name || "";
+    form.elements.email.value = authUser.email;
+    form.elements.email.readOnly = true;
+  }
+  showPartner();
+}
+
+// ---- Sign in with Google / Microsoft (OpenID Connect, id_token) ----
+let authUser = null;
+const AUTH_URLS = {
+  google: "https://accounts.google.com/o/oauth2/v2/auth",
+  microsoft: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+};
+
+function randomHex() {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function startLogin(provider, clientId) {
+  const nonce = randomHex();
+  const state = `${provider}.${randomHex()}`;
+  try { sessionStorage.setItem("tjAuth", JSON.stringify({ provider, nonce, state })); } catch (_) {}
+  const q = new URLSearchParams({
+    client_id: clientId, redirect_uri: location.origin + "/", response_type: "id_token",
+    scope: "openid email profile", nonce, state, prompt: "select_account",
+  });
+  if (provider === "microsoft") q.set("response_mode", "fragment");
+  location.assign(`${AUTH_URLS[provider]}?${q}`);
+}
+
+// Back from Google / Microsoft with #id_token=…: let the server check it and set the session cookie
+async function finishLogin() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.has("id_token") && !h.has("error")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem("tjAuth") || "null"); sessionStorage.removeItem("tjAuth"); } catch (_) {}
+  if (h.has("error")) throw new Error(h.get("error_description") || h.get("error"));
+  if (!saved || saved.state !== h.get("state")) throw new Error("The sign-in took too long or was opened in another tab. Please try again.");
+  const res = await fetch("/api/login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider: saved.provider, id_token: h.get("id_token"), nonce: saved.nonce }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+}
+
+function showLogin(cfg, error) {
+  $("appMain").classList.add("hidden");
+  $("loginScreen").classList.remove("hidden");
+  [["google", cfg.google_client_id], ["microsoft", cfg.microsoft_client_id]].forEach(([p, id]) => {
+    const b = $(`${p}Btn`);
+    b.classList.toggle("hidden", !id);
+    b.onclick = () => { b.disabled = true; startLogin(p, id); };
+  });
+  $("loginError").textContent = error ? `Sign-in failed: ${error}` : "";
+  $("loginError").classList.toggle("hidden", !error);
+}
+
+function showApp() {
+  $("loginScreen").classList.add("hidden");
+  $("appMain").classList.remove("hidden");
+  if (authUser) {
+    $("userEmail").textContent = authUser.email;
+    $("userChip").classList.remove("hidden");
+  }
+  restorePartner();
+}
+
+$("signOutBtn").addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" }).catch(() => {});
+  location.reload();
+});
+
+(async function initAuth() {
+  let cfg = { auth: false };
+  try { const r = await fetch("/api/config"); if (r.ok) cfg = await r.json(); } catch (_) {}
+  if (!cfg.auth) return showApp();  // sign-in not configured: open access
+  let error = "";
+  try { await finishLogin(); } catch (e) { error = e.message; }
+  const res = await fetch("/api/me").catch(() => null);
+  authUser = res && res.ok ? (await res.json()).user : null;
+  if (!authUser) return showLogin(cfg, error);
+  showApp();
+})();
 
 // Explain the browser's own "Upload N files?" prompt before it appears
 const openFolderModal = () => { $("folderModal").classList.remove("hidden"); $("fmGo").focus(); };
