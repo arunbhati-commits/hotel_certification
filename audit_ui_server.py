@@ -192,7 +192,7 @@ def build_audit_payload(root: Path, only_case: str | None, strict_option_id: boo
 
 
 CERT_CASES = range(1, 15)
-CERT_NOTIFY_TO = "aryan.singh@tripjack.com"
+CERT_NOTIFY_TO = "aryan.singh@tripjack.com,arun.bhati@tripjack.com"  # comma-separated
 
 
 def _case_number(name: str) -> int | None:
@@ -310,7 +310,7 @@ def _send_via_smtp(host: str, user: str, password: str, sender: str, to: str, re
 def send_certification_mail(partner: dict, result: dict) -> str:
     """Email Tripjack the partner's details and results.
     Uses Mailercloud when MAILERCLOUD_API_KEY and MAIL_FROM are set, otherwise SMTP
-    (SMTP_HOST, SMTP_USER, SMTP_PASS, optional SMTP_PORT / MAIL_FROM). CERT_NOTIFY_TO overrides the recipient.
+    (SMTP_HOST, SMTP_USER, SMTP_PASS, optional SMTP_PORT / MAIL_FROM). CERT_NOTIFY_TO (comma-separated) overrides the recipients.
     Returns "sent", "not_configured" or "failed"."""
     webhook = os.environ.get("CERT_WEBHOOK_URL")
     groundmail_key = os.environ.get("GROUNDMAIL_API_KEY")
@@ -321,15 +321,28 @@ def send_certification_mail(partner: dict, result: dict) -> str:
     if not webhook and not groundmail_key and not use_api and not (host and user and password):
         print("[cert-mail] mail not configured (set GROUNDMAIL_API_KEY, CERT_WEBHOOK_URL, MAILERCLOUD_API_KEY + MAIL_FROM, or SMTP_*); mail not sent", flush=True)
         return "not_configured"
-    to = os.environ.get("CERT_NOTIFY_TO", CERT_NOTIFY_TO)
+    recipients = [a.strip() for a in os.environ.get("CERT_NOTIFY_TO", CERT_NOTIFY_TO).split(",") if a.strip()]
     when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
 
-    summary = result.get("summary", {})
-    outcome = "passed" if all_cases_passed(result) else f"{summary.get('passed', 0)}/{len(CERT_CASES)} passed"
-    subject = f"Hotel V3 certification {outcome} - {partner.get('company') or 'Unknown company'}"
-    cases = sorted(result.get("results", []), key=lambda r: _case_number(str(r.get("case", ""))) or 99)
+    # Status of each certification case 1-14 (a case that was not uploaded counts as failed)
+    status: dict[int, str] = {}
+    for row in result.get("results", []):
+        n = _case_number(str(row.get("case", "")))
+        if n in CERT_CASES and n not in status:
+            status[n] = row.get("status") or "FAIL"
+    passed = sum(1 for n in CERT_CASES if status.get(n) == "PASS")
+    not_uploaded = sum(1 for n in CERT_CASES if n not in status)
+    failed = len(CERT_CASES) - passed - not_uploaded
+    outcome = "passed" if passed == len(CERT_CASES) else f"{passed}/{len(CERT_CASES)} passed"
+    counts = f"{passed} passed, {failed} failed" + (f", {not_uploaded} not uploaded" if not_uploaded else "")
+    subject = f"Hotel V3 certification {outcome} ({counts}) - {partner.get('company') or 'Unknown company'}"
     text = (
-        f"A partner uploaded Hotel API V3 UAT test cases on the Tripjack Certification V3 Hotel checker: {outcome}.\n\n"
+        f"A partner uploaded Hotel API V3 UAT test cases on the Tripjack Certification V3 Hotel checker.\n\n"
+        f"RESULT       : {'ALL 14 PASSED - ready for certification' if passed == len(CERT_CASES) else 'NOT READY'}\n"
+        f"Passed       : {passed} of {len(CERT_CASES)}\n"
+        f"Failed       : {failed}\n"
+        + (f"Not uploaded : {not_uploaded}\n" if not_uploaded else "")
+        + "\n"
         f"Name         : {partner.get('name', '')}\n"
         f"Company      : {partner.get('company', '')}\n"
         f"TJ user ID   : {partner.get('tjUserId', '')}\n"
@@ -337,27 +350,29 @@ def send_certification_mail(partner: dict, result: dict) -> str:
         f"Email        : {partner.get('email', '')}\n"
         f"Checked on   : {when}\n"
         f"Folder       : {result.get('source_folder', '')}\n\n"
-        "Results:\n" + "\n".join(f"  {r.get('case')}: {r.get('status')}" for r in cases) + "\n"
+        "Results:\n" + "\n".join(f"  Test Case {n}: {status.get(n, 'NOT UPLOADED')}" for n in CERT_CASES) + "\n"
     )
     reply_to = partner.get("email", "")
-    try:
-        if groundmail_key:
-            _send_via_groundmail(groundmail_key, os.environ.get("MAIL_FROM") or GROUNDMAIL_SANDBOX_FROM, to, subject, text)
-            via = "groundmail"
-        elif webhook:
-            _send_via_webhook(webhook, partner, outcome, to, subject, text)
-            via = "apps-script"
-        elif use_api:
-            _send_via_mailercloud(api_key, sender, to, reply_to, subject, text)
-            via = "mailercloud"
-        else:
-            _send_via_smtp(host, user, password, sender, to, reply_to, subject, text)
-            via = "smtp"
-        print(f"[cert-mail] sent to {to} for {partner.get('company')} via {via}", flush=True)
-        return "sent"
-    except Exception as e:  # never fail the upload because of mail
-        print(f"[cert-mail] failed: {e}", flush=True)
-        return "failed"
+    sent: list[str] = []
+    for to in recipients:  # one mail per recipient, so one bad address cannot block the others
+        try:
+            if groundmail_key:
+                _send_via_groundmail(groundmail_key, os.environ.get("MAIL_FROM") or GROUNDMAIL_SANDBOX_FROM, to, subject, text)
+                via = "groundmail"
+            elif webhook:
+                _send_via_webhook(webhook, partner, outcome, to, subject, text)
+                via = "apps-script"
+            elif use_api:
+                _send_via_mailercloud(api_key, sender, to, reply_to, subject, text)
+                via = "mailercloud"
+            else:
+                _send_via_smtp(host, user, password, sender, to, reply_to, subject, text)
+                via = "smtp"
+            print(f"[cert-mail] sent to {to} for {partner.get('company')} via {via}", flush=True)
+            sent.append(to)
+        except Exception as e:  # never fail the upload because of mail
+            print(f"[cert-mail] failed for {to}: {e}", flush=True)
+    return "sent" if sent else "failed"
 
 
 class AuditUIHandler(BaseHTTPRequestHandler):

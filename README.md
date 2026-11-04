@@ -33,7 +33,7 @@ The repo deploys to Vercel as-is (Framework preset: **Other**, no build command)
 ## Certification email
 
 After every upload (for now; the 14/14 condition is switched off) the server emails the partner's form details (name, company,
-TJ user ID, phone, email) and the results to `aryan.singh@tripjack.com`.
+TJ user ID, phone, email) and the results (how many passed / failed) to `aryan.singh@tripjack.com` and `arun.bhati@tripjack.com`.
 
 **Groundmail (simplest, free):** set `GROUNDMAIL_API_KEY` (starts with `gm_`). Without a verified domain it sends
 from `noreply@mail.groundmail.dev` and only to the Groundmail account's own email, so sign up with the address
@@ -56,7 +56,7 @@ optional `MAIL_FROM_NAME`.
 | `SMTP_USER` | the sending mailbox |
 | `SMTP_PASS` | its app password |
 | `MAIL_FROM` | optional, defaults to `SMTP_USER` |
-| `CERT_NOTIFY_TO` | optional, defaults to `aryan.singh@tripjack.com` |
+| `CERT_NOTIFY_TO` | optional, comma-separated; defaults to `aryan.singh@tripjack.com,arun.bhati@tripjack.com` |
 
 Without them the check still works, but no email is sent (`[cert-mail] SMTP not configured` in the logs).
 
