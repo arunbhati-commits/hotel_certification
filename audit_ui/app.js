@@ -29,6 +29,7 @@ function bookingDetailNote(tc) {
 // Plain-language name and "what to do" for each check
 const RULES = {
   CORRELATION_ID: ["Correlation ID", "Use the same correlationId in the Search, Detail and Review requests."],
+  DETAIL_ONE_HOTEL: ["One hotel in Detail", "Search may list many hotels, but the Detail request must be for exactly one hotel (one hid)."],
   SAME_PAN: ["Same PAN", "Use one PAN for the whole booking: the lead guest of every room (TC10) or every adult guest (TC11) must carry the same PAN."],
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 100000."],
@@ -59,6 +60,11 @@ function explain(f) {
   const field = (name) => { const m = msg.match(new RegExp("^" + name + "\\s*:\\s*(.*)$", "mi")); return m ? m[1].replace(/\s*\[[^\]]*\]\s*$/, "").trim() : ""; };
   let m;
   switch (f.rule) {
+    case "DETAIL_ONE_HOTEL": {
+      const ids = (first.match(/\(([^)]*)\)/) || [])[1] || "";
+      return { problem: `The Detail request asks for more than one hotel (${ids}). Search can list many hotels, but Detail must be for exactly one hotel.`,
+               fix: `Pick one hotel from the Search response and send only its ID in the Detail request, e.g. "hid": "${ids.split(",")[0].trim() || "100000000991"}".` };
+    }
     case "SAME_PAN": {
       if (/^PAN missing/.test(first)) return {
         problem: `The Book request has no PAN for ${first.replace(/^PAN missing for: /, "").replace(/ \(Book request.*$/, "")}. This test case needs the same PAN for every guest listed.`,

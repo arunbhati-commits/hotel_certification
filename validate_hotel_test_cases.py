@@ -2387,10 +2387,21 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             else:
                 result.add("INFO", "NATIONALITY", f"{label} request: non-Indian nationality {nat}")
 
+    # --- Search may list many hotels, but Detail must be for exactly one hotel ---
+    if detail_req:
+        dh = [v for v in (_deep_find(detail_req, k) for k in ("hids", "hotelIds", "hid", "hotelId")) if v not in (None, "", [])]
+        ids: list[str] = []
+        for v in dh[:1]:
+            ids = [str(x).strip() for x in v] if isinstance(v, list) else [x.strip() for x in str(v).split(",") if x.strip()]
+        if len(set(ids)) > 1:
+            result.add("ERROR", "DETAIL_ONE_HOTEL", f"Detail request has {len(set(ids))} hotels ({', '.join(ids[:5])}); it must be for exactly one hotel")
+        elif ids:
+            result.add("INFO", "DETAIL_ONE_HOTEL", f"Detail request is for one hotel ({ids[0]})")
+
     # --- Only TJ test hotels may be used: every hotel ID must start with 100000 ---
     TJ_HOTEL_PREFIX = "100000"
     for label, obj, keys in (("Search", search_req, ("hids", "hid", "hotelIds", "hotelId")),
-                             ("Detail", detail_req, ("hid", "hotelId", "id")),
+                             ("Detail", detail_req, ("hid", "hids", "hotelId", "hotelIds", "id")),
                              ("Review", review_req, ("hid", "hotelId"))):
         if not obj:
             continue
