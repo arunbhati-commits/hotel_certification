@@ -2408,7 +2408,7 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
         found = next((v for v in (_deep_find(obj, k) for k in keys) if v not in (None, "", [])), None)
         if found is None:
             continue  # absence is reported by HOTEL_ID / FILES
-        ids = [str(x).strip() for x in (found if isinstance(found, list) else [found])]
+        ids = [x.strip() for v in (found if isinstance(found, list) else [found]) for x in str(v).split(",") if x.strip()]
         bad = [i for i in ids if not i.startswith(TJ_HOTEL_PREFIX)]
         if bad:
             shown = ", ".join(bad[:5]) + (f" (+{len(bad) - 5} more)" if len(bad) > 5 else "")
