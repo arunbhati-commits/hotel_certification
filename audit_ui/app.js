@@ -12,7 +12,7 @@ const TEST_CASES = [
     note: "Policy-only case: a booking flow is not required, so missing booking files are not counted." },
   { n: 10, desc: "Same PAN for all rooms", city: "Domestic / International", adults: "2, 2", children: "1, 0", rooms: "2", note: "Indian nationals only." },
   { n: 11, desc: "Same PAN for all guests", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Indian nationals only." },
-  { n: 12, desc: "Booking using PASSPORT", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Non-Indian nationality with a valid passport number (if applicable). The Book request must contain a valid passport number for the guests." },
+  { n: 12, desc: "Booking using PASSPORT", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Non-Indian nationality (any code except 106, which is India) with a valid passport number (if applicable). The Book request must contain a valid passport number for the guests." },
   { n: 13, desc: "Booking with corporate PAN", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Indian nationals only (if applicable). A corporate PAN (Permanent Account Number) follows the standard 10-character alphanumeric structure AAAAA0000A issued by the Income Tax Department of India, where the fourth character denotes the entity type as 'C' for Company." },
   { n: 14, desc: "Cancel all test bookings made during certification", infoOnly: true,
     note: "Cancel every test booking, then add the Booking Detail response of EVERY test booking showing status CANCELLED to this folder (all bookings from all test cases)." },
@@ -29,6 +29,7 @@ function bookingDetailNote(tc) {
 // Plain-language name and "what to do" for each check
 const RULES = {
   CORRELATION_ID: ["Correlation ID", "Use the same correlationId in the Search, Detail and Review requests."],
+  NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 100000."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
   SEARCH_DETAIL_DATES: ["Dates / nationality / currency", "Keep checkIn, checkOut, nationality and currency identical in Search and Detail."],
@@ -57,6 +58,14 @@ function explain(f) {
   const field = (name) => { const m = msg.match(new RegExp("^" + name + "\\s*:\\s*(.*)$", "mi")); return m ? m[1].replace(/\s*\[[^\]]*\]\s*$/, "").trim() : ""; };
   let m;
   switch (f.rule) {
+    case "NATIONALITY": {
+      const step = (first.match(/^(Search|Detail) request/) || [])[1] || "Search/Detail";
+      return /missing/.test(first)
+        ? { problem: `The ${step} request has no nationality. This test case needs a non-Indian nationality.`,
+            fix: `Add "nationality" with a non-Indian code (anything except 106) to the ${step} request, e.g. "nationality": "231".` }
+        : { problem: `The ${step} request uses nationality 106 (India). Test Case 12 is a passport booking and needs a non-Indian nationality; otherwise certification fails.`,
+            fix: `Use a non-Indian nationality code (anything except 106, e.g. 231) in the Search and Detail requests, and book with the guest's passport details.` };
+    }
     case "TJ_HOTEL": {
       const step = (first.match(/^(Search|Detail|Review) request/) || [])[1] || "a";
       const ids = first.split(": ").pop();

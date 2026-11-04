@@ -114,6 +114,7 @@ TEST_CASE_SPECS: dict[str, dict] = {
     "Test Case 12": {
         "desc": "Booking using PASSPORT (Create a booking by selecting a non-Indian nationality and using a valid Passport number)",
         "domestic": False,
+        "non_indian": True,  # nationality must not be 106 (India)
         "rooms": 1,
         "adults": [2],
         "children": [1],
@@ -2339,6 +2340,20 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             result.add("ERROR", "TIMEOUT_MS", f"{label} request: timeoutMs must be a positive number, got {tv!r}")
         else:
             result.add("INFO", "TIMEOUT_MS", f"{label} request: timeoutMs = {tv}")
+
+    # --- Non-Indian nationality cases (TC12): nationality must not be 106 (India) ---
+    if _spec_for(case_dir.name).get("non_indian"):
+        INDIA_NATIONALITY = "106"
+        for label, obj in (("Search", search_req), ("Detail", detail_req)):
+            if not obj:
+                continue
+            nat = obj.get("nationality") or _deep_find(obj, "nationality")
+            if nat in (None, ""):
+                result.add("ERROR", "NATIONALITY", f"{label} request: nationality is missing (must be a non-Indian nationality, not {INDIA_NATIONALITY})")
+            elif str(nat).strip() == INDIA_NATIONALITY:
+                result.add("ERROR", "NATIONALITY", f"{label} request: nationality is {INDIA_NATIONALITY} (India); this test case needs a non-Indian nationality")
+            else:
+                result.add("INFO", "NATIONALITY", f"{label} request: non-Indian nationality {nat}")
 
     # --- Only TJ test hotels may be used: every hotel ID must start with 100000 ---
     TJ_HOTEL_PREFIX = "100000"
