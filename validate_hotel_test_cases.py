@@ -2328,6 +2328,18 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
     elif corr_values:
         result.add("INFO", "CORRELATION_ID", f"correlationId OK:{next(iter(corr_values.values()))}")
 
+    # --- timeoutMs is mandatory in Search and Detail requests ---
+    for label, obj in (("Search", search_req), ("Detail", detail_req)):
+        if not obj:
+            continue
+        tv = _deep_find(obj, "timeoutMs")
+        if tv is None:
+            result.add("ERROR", "TIMEOUT_MS", f"{label} request: timeoutMs is missing (mandatory)")
+        elif isinstance(tv, bool) or not isinstance(tv, (int, float)) or tv <= 0:
+            result.add("ERROR", "TIMEOUT_MS", f"{label} request: timeoutMs must be a positive number, got {tv!r}")
+        else:
+            result.add("INFO", "TIMEOUT_MS", f"{label} request: timeoutMs = {tv}")
+
     # --- dates & room combo (search vs detail) ---
     if search_req and detail_req:
         for field in ("checkIn", "checkOut", "nationality", "currency"):

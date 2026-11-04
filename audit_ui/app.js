@@ -29,6 +29,7 @@ function bookingDetailNote(tc) {
 // Plain-language name and "what to do" for each check
 const RULES = {
   CORRELATION_ID: ["Correlation ID", "Use the same correlationId in the Search, Detail and Review requests."],
+  TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
   SEARCH_DETAIL_DATES: ["Dates / nationality / currency", "Keep checkIn, checkOut, nationality and currency identical in Search and Detail."],
   ROOM_COMBO: ["Room setup", "Keep the rooms (adults, children, child ages) identical in Search and Detail."],
   HOTEL_ID: ["Hotel ID", "Use the same hotel ID from Search through to Review."],
@@ -55,6 +56,14 @@ function explain(f) {
   const field = (name) => { const m = msg.match(new RegExp("^" + name + "\\s*:\\s*(.*)$", "mi")); return m ? m[1].replace(/\s*\[[^\]]*\]\s*$/, "").trim() : ""; };
   let m;
   switch (f.rule) {
+    case "TIMEOUT_MS": {
+      const step = (first.match(/^(Search|Detail) request/) || [])[1] || "Search/Detail";
+      return /missing/.test(first)
+        ? { problem: `The ${step} request does not contain "timeoutMs". It is mandatory in the Search and Detail requests; without it certification fails.`,
+            fix: `Add "timeoutMs": 30000 to the ${step} request body and run the case again.` }
+        : { problem: `The ${step} request has an invalid timeoutMs value (${first.split("got ")[1] || "?"}).`,
+            fix: `Set "timeoutMs" to a positive number in milliseconds, e.g. 30000.` };
+    }
     case "CORRELATION_ID": {
       const pairs = [...msg.matchAll(/'(\w+)':\s*'([^']*)'/g)].map((x) => [STEP_NAMES[x[1]] || x[1], x[2]]);
       const base = pairs.length ? pairs[0][1] : "";
