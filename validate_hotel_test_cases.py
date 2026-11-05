@@ -499,6 +499,20 @@ def _raw_booking_ids(path: "Path | None") -> "set[str]":
         return set()
 
 
+# Booking ID in a URL path, e.g. https://…/cancel-booking/TGP203502381126
+_URL_BID_RE = re.compile(r"/([A-Z]{2,4}\d{10,14})(?=[/?#\s\"']|$)")
+
+
+def _url_booking_ids(path: "Path | None") -> "set[str]":
+    """Booking IDs written in a request URL (some Cancel requests are just the URL)."""
+    if not path or not path.is_file():
+        return set()
+    try:
+        return set(_URL_BID_RE.findall(path.read_text(encoding="utf-8-sig", errors="replace")))
+    except Exception:
+        return set()
+
+
 # Regex: find totalPrice / amount numeric values in raw text (price-like keys only)
 _RAW_TOTAL_PRICE_RE = re.compile(
     r'["\']?(?:totalPrice|total_price|totalAmount|grossAmount|payableAmount|'
@@ -2743,7 +2757,7 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
     for _fp in _all_case_files:
         _parsed = _path_to_parsed.get(_fp) or load_json(_fp) or {}
         _all_bid_ids |= collect_booking_ids(_parsed)
-        _all_bid_ids |= _raw_booking_ids(_fp)
+        _all_bid_ids |= _raw_booking_ids(_fp) or _url_booking_ids(_fp)
 
     # Canonical booking ID = the one found in the most files
     _canonical_bid: str | None = None
@@ -2762,6 +2776,8 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
         _parsed = _path_to_parsed.get(_fp) or load_json(_fp) or {}
         _file_ids = collect_booking_ids(_parsed)
         _file_ids |= _raw_booking_ids(_fp)
+        if not _file_ids:
+            _file_ids = _url_booking_ids(_fp)
         # Value-based fallback: does the canonical ID appear anywhere in this file?
         if not _file_ids and _canonical_bid:
             if _value_exists_anywhere(_parsed, _canonical_bid) or _raw_contains(_fp, _canonical_bid):
@@ -2790,6 +2806,20 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
                 else "bookingId: (not found in any file)"
             )
             result.add("INFO", "BOOKING_ID", f"{headline}\n{_step_lines}")
+
+    # Requests after Review must carry the bookingId (the mismatch check above only compares files that have one)
+    if not _spec_for(case_dir.name).get("cancel_all"):
+        for _slot, _label in (("hold_req", "Hold Request"), ("book_req", "Book Request"),
+                              ("confirm_hold_req", "Confirm Hold Request"),
+                              ("booking_detail_req", "Booking Detail Request"), ("cancel_req", "Cancel Request")):
+            _path = paths.get(_slot)
+            if not _path and not data.get(_slot):
+                continue  # this step is not part of the flow
+            if not collect_booking_ids(data.get(_slot) or {}) and not (_path and (_raw_booking_ids(_path) or _url_booking_ids(_path))):
+                _fname = _path.name if _path else _label
+                result.add("ERROR", "BOOKING_ID",
+                           f"bookingId missing: {_fname} has no bookingId"
+                           + (f" (expected {_canonical_bid})" if _canonical_bid else ""))
 
     # --- traveller / PAN vs room combo ---
     _dr_rooms_raw = (detail_req.get("rooms") or _deep_find(detail_req, "rooms")) if detail_req else None

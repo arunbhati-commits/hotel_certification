@@ -131,6 +131,9 @@ function explain(f) {
       return { problem: "The reviewHash in the Review request is not the one returned in the Detail response.",
                fix: field("Detail Response") ? `Send this reviewHash from the Detail response: ${field("Detail Response")}` : "Send the reviewHash from the Detail response unchanged." };
     case "BOOKING_ID": {
+      if ((m = first.match(/^bookingId missing: (.*) has no bookingId(?: \(expected (\S+)\))?/)))
+        return { problem: `${m[1]} does not contain a bookingId. Every request after Review (Hold / Book / Confirm / Booking Detail / Cancel) must send the bookingId of this booking.`,
+                 fix: `Add "bookingId": "${m[2] || "<bookingId from the Review response>"}" to ${m[1]}.` };
       const exp = (first.match(/expected (\S+);/) || [])[1] || "";
       const where = first.split("; ").slice(1).join("; ");
       return { problem: `Booking ID mismatch: ${where}, but the rest of this booking uses ${exp}. Every request of one booking (Hold / Book / Confirm / Booking Detail / Cancel) must use the same bookingId.`,
