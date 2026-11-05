@@ -657,11 +657,17 @@ def find_file(case_dir: Path, patterns: list[str], skip_if: list[str] | None = N
 _SKIP_IF: dict[str, list[str]] = {
     "detail_req": ["booking", "bookdetail", "static"],
     "detail_res": ["booking", "bookdetail", "static"],
+    # "hotelDetail-search Response" contains "search response": keep detail files out of the search slots
+    "search_req": ["hoteldetail", "detailsearch"],
+    "search_res": ["hoteldetail", "detailsearch"],
     # "Confirm Hold Request" contains "hold request": keep confirm files out of the hold / book slots
     "hold_req": ["confirm"],
     "hold_res": ["confirm"],
     "book_req": ["confirm"],
     "book_res": ["confirm"],
+    # "detail after cancel Response" contains "cancel response": keep it out of the cancel slots
+    "cancel_req": ["aftercancel", "postcancel"],
+    "cancel_res": ["aftercancel", "postcancel"],
 }
 
 
@@ -2948,6 +2954,23 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
 
     # --- Booking flow sequence ---
     validate_flow_sequence(result, paths, case_dir.name, data=data)
+
+    # --- Every API call that is in the folder needs both its request and its response ---
+    if not _spec_for(case_dir.name).get("cancel_all"):
+        _already = " ".join(f.message for f in result.findings if f.severity == "ERROR")
+        for _base, _label in (("search", "Search"), ("detail", "Detail"), ("review", "Review"),
+                              ("cancel_policy", "Cancellation Policy"), ("hold", "Hold"),
+                              ("confirm_hold", "Confirm-Hold"), ("book", "Book"),
+                              ("booking_detail", "Booking Detail"), ("cancel", "Cancel")):
+            _has = {side: bool(paths.get(f"{_base}_{side}") or data.get(f"{_base}_{side}")) for side in ("req", "res")}
+            if _has["req"] == _has["res"]:
+                continue
+            _missing = f"{_label} {'Response' if _has['req'] else 'Request'}"
+            if _missing in _already:
+                continue  # already reported by the flow check
+            result.add("ERROR", "FILE_PAIR",
+                       f"Missing file: {_missing} (the folder has the {_label} {'Request' if _has['req'] else 'Response'}, "
+                       f"so its {'response' if _has['req'] else 'request'} must be there too)")
 
     # --- Payment amount (vs review response AND detail response) ---
     # Detect booking flow type to pick the right payment request source:

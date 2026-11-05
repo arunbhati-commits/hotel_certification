@@ -33,6 +33,7 @@ const RULES = {
   SAME_PAN: ["Same PAN", "Use one PAN for the whole booking: the lead guest of every room (TC10) or every adult guest (TC11) must carry the same PAN."],
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 10."],
+  FILE_PAIR: ["Request / response pair", "Every API call in the folder needs both its request and its response file."],
   AFTER_CANCEL: ["Booking Detail after cancel", "After cancelling, call Booking Detail again and add its response; it must show status CANCELLED."],
   BOOKING_ID: ["Booking ID", "All requests of one booking must use the same bookingId (from the Review response)."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
@@ -131,6 +132,11 @@ function explain(f) {
       if (/not found/i.test(first)) return { problem: "reviewHash is missing in the Review request.", fix: "Copy the reviewHash from the Detail response into the Review request." };
       return { problem: "The reviewHash in the Review request is not the one returned in the Detail response.",
                fix: field("Detail Response") ? `Send this reviewHash from the Detail response: ${field("Detail Response")}` : "Send the reviewHash from the Detail response unchanged." };
+    case "FILE_PAIR":
+      if ((m = first.match(/^Missing file: (.+?) \(the folder has the (.+?), so/)))
+        return { problem: `The ${m[1]} file is missing. The folder has the ${m[2]}, so its matching ${/Response$/.test(m[1]) ? "response" : "request"} must be included too.`,
+                 fix: `Add the ${m[1]} file for this call to the test case folder, then upload again.` };
+      break;
     case "AFTER_CANCEL": {
       if (/^Missing file/.test(first))
         return { problem: "The Booking Detail response after the cancel is missing. After cancelling, Booking Detail must be called again to show the updated status (CANCELLED).",
