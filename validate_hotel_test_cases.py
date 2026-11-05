@@ -1479,7 +1479,8 @@ def validate_test_case_spec(case_dir: Path, result: CaseResult, detail_req: dict
     if requires_pan:
         if has_pan:
             result.add("INFO", "TEST_CASE_SPEC", "PAN present — requirement met")
-        else:
+        elif not any(f.rule == "PAN" and f.severity == "ERROR" for f in result.findings):
+            # skip when the PAN check already reported the same missing PAN
             result.add("ERROR", "TEST_CASE_SPEC", "PAN required but missing in travellers")
     if no_pan:
         if not has_pan:
@@ -2770,18 +2771,25 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
                    else ("  [unmatched]" if _canonical_bid else "")
             _bid_rows.append((_fp.name, f"{' | '.join(sorted(_file_ids))}{_tag}"))
 
-    # Display only — no pass/fail enforcement on booking ID consistency
+    # Every file of one booking must use the same bookingId. Test Case 14 (cancel all)
+    # legitimately lists the IDs of every test booking, so it is display only.
     if _bid_rows:
-        headline = (
-            f"bookingId: {_canonical_bid}" if _canonical_bid
-            else "bookingId: (not found in any file)"
-        )
         _max_lbl = max((len(lbl) for lbl, _ in _bid_rows), default=20)
         _step_lines = "\n".join(
             f"{lbl:<{_max_lbl}} : {val}"
             for lbl, val in _bid_rows
         )
-        result.add("INFO", "BOOKING_ID", f"{headline}\n{_step_lines}")
+        _mismatched = [(lbl, val.replace("  [unmatched]", "")) for lbl, val in _bid_rows if val.endswith("[unmatched]")]
+        if _mismatched and not _spec_for(case_dir.name).get("cancel_all"):
+            _where = "; ".join(f"{lbl} uses {val}" for lbl, val in _mismatched)
+            result.add("ERROR", "BOOKING_ID",
+                       f"bookingId MISMATCH: expected {_canonical_bid}; {_where}\n{_step_lines}")
+        else:
+            headline = (
+                f"bookingId: {_canonical_bid}" if _canonical_bid
+                else "bookingId: (not found in any file)"
+            )
+            result.add("INFO", "BOOKING_ID", f"{headline}\n{_step_lines}")
 
     # --- traveller / PAN vs room combo ---
     _dr_rooms_raw = (detail_req.get("rooms") or _deep_find(detail_req, "rooms")) if detail_req else None
@@ -2817,10 +2825,12 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
                     _exp_ca = [int(_exp_ca)]
                 exp_ages = sorted(_exp_ca)
                 if exp_ages and exp_ages != act.get("childAge"):
+                    _got = act.get("childAge") or []
                     result.add(
                         "WARN",
                         "TRAVELLER_ROOMS",
-                        f"room[{i}] child ages: expected {exp_ages} vs travellers {act.get('childAge')}",
+                        f"room[{i}] child ages: searched {exp_ages}, "
+                        + (f"Hold/Book has {_got}" if _got else "no child age in the Hold/Book travellers"),
                     )
 
         pan_required = None
@@ -2830,11 +2840,13 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             pan_required = (selected_detail_opt.get("compliance") or {}).get("panRequired")
 
         if pan_required is True:
+            room_errors = 0
             for i, act in enumerate(actual_trav):
                 if not act.get("hasPan") and not act.get("hasPassport"):
                     result.add("ERROR", "PAN", f"room[{i}]: panRequired but no pan/passport on travellers")
-            # at least one pan on lead paths
-            if actual_trav and not any(r.get("hasPan") for r in actual_trav):
+                    room_errors += 1
+            # at least one pan on lead paths (only when the per-room check did not already say so)
+            if actual_trav and not room_errors and not any(r.get("hasPan") for r in actual_trav):
                 result.add("ERROR", "PAN", "panRequired=true but no PAN in hold/book payload")
         elif pan_required is False:
             if any(r.get("hasPan") for r in actual_trav):

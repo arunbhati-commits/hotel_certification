@@ -33,6 +33,7 @@ const RULES = {
   SAME_PAN: ["Same PAN", "Use one PAN for the whole booking: the lead guest of every room (TC10) or every adult guest (TC11) must carry the same PAN."],
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 100000."],
+  BOOKING_ID: ["Booking ID", "All requests of one booking must use the same bookingId (from the Review response)."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
   SEARCH_DETAIL_DATES: ["Dates / nationality / currency", "Keep checkIn, checkOut, nationality and currency identical in Search and Detail."],
   ROOM_COMBO: ["Room setup", "Keep the rooms (adults, children, child ages) identical in Search and Detail."],
@@ -129,6 +130,12 @@ function explain(f) {
       if (/not found/i.test(first)) return { problem: "reviewHash is missing in the Review request.", fix: "Copy the reviewHash from the Detail response into the Review request." };
       return { problem: "The reviewHash in the Review request is not the one returned in the Detail response.",
                fix: field("Detail Response") ? `Send this reviewHash from the Detail response: ${field("Detail Response")}` : "Send the reviewHash from the Detail response unchanged." };
+    case "BOOKING_ID": {
+      const exp = (first.match(/expected (\S+);/) || [])[1] || "";
+      const where = first.split("; ").slice(1).join("; ");
+      return { problem: `Booking ID mismatch: ${where}, but the rest of this booking uses ${exp}. Every request of one booking (Hold / Book / Confirm / Booking Detail / Cancel) must use the same bookingId.`,
+               fix: `Use bookingId ${exp} (the one from the Review response) in every request of this test case. A different ID usually means a file from another booking was copied in; run the flow again and save the right files.` };
+    }
     case "OPTION_ID":
       if (/not found/i.test(first)) return { problem: "optionId is missing in the Review request.", fix: "Send the optionId of the room you picked from the Detail response in the Review request." };
       return { problem: "The optionId in the Review request was not returned in the Detail response.", fix: "Pick an optionId from the Detail response and send it unchanged in the Review request." };
@@ -137,6 +144,12 @@ function explain(f) {
     case "TRAVELLER_ROOMS":
       if ((m = first.match(/room count: search\/detail (\d+) vs hold\/book (\d+)/)))
         return { problem: `You searched ${m[1]} room(s), but the Hold/Book request has guests for ${m[2]} room(s).`, fix: `Send guests for exactly ${m[1]} room(s) in the Hold/Book request, one room entry per searched room.` };
+      if ((m = first.match(/room\[(\d+)\] child ages: searched \[([^\]]*)\], (.*)$/))) {
+        const missing = /no child age/.test(m[3]);
+        return { problem: missing ? `${roomNo(m[1])}: you searched children aged ${m[2]}, but the Hold/Book request does not send the children's age.`
+                                  : `${roomNo(m[1])}: you searched children aged ${m[2]}, but the Hold/Book request has ${m[3].replace("Hold/Book has ", "ages ")}.`,
+                 fix: `Send each child's age (${m[2]}) in the Hold/Book travellers for ${roomNo(m[1])}, matching the search.` };
+      }
       if ((m = first.match(/room\[(\d+)\] (adults|children): expected (\d+) got (\d+)/)))
         return { problem: `${roomNo(m[1])}: you searched ${m[3]} ${m[2]}, but the Hold/Book request has ${m[4]}.`, fix: `Add ${m[3]} ${m[2]} for ${roomNo(m[1])} in the Hold/Book request.` };
       break;
@@ -237,7 +250,9 @@ function evaluate(tc, row) {
 
 function problemHtml(f) {
   const { problem, fix } = explain(f);
-  return `<li><span class="msg">${esc(problem)}</span>` + (fix ? `<span class="fix"><b>How to fix:</b> ${esc(fix)}</span>` : "") + `</li>`;
+  const rows = kvRowsHtml(f);
+  return `<li><span class="msg">${esc(problem)}</span>` + (fix ? `<span class="fix"><b>How to fix:</b> ${esc(fix)}</span>` : "")
+    + (rows ? `<div class="kvs in-problem">${rows}</div>` : "") + `</li>`;
 }
 
 // ---- Simple error report: only what is wrong and how to fix it ----
@@ -411,10 +426,9 @@ function renderCases() {
 
 
 // ---- Details pop-up ----
-function checkHtml(f) {
-  const label = (RULES[f.rule] || [f.rule])[0];
-  const lines = String(f.message).split("\n");
-  const rows = lines.slice(1).filter((l) => l.trim()).map((line) => {
+// "label : value [matched]" lines under a finding's first line, as a table with ✓ / ✗
+function kvRowsHtml(f) {
+  return String(f.message).split("\n").slice(1).filter((l) => l.trim()).map((line) => {
     let key, val;
     const i = line.indexOf(" : ");
     const j = line.indexOf(" — ");
@@ -425,7 +439,14 @@ function checkHtml(f) {
     val = val.replace(/\s*\[(matched|unmatched|MATCH|MISMATCH|NOT FOUND)\]/gi, "");
     return `<div class="kv"><span class="k">${esc(key.trim())}</span><span class="v">${esc(val.trim())}</span>${tag ? `<span class="tick ${tag}">${tag === "ok" ? "✓" : "✗"}</span>` : ""}</div>`;
   }).join("");
-  return `<div class="check"><div class="check-head"><span class="tick ok">✓</span><b>${esc(label)}</b><span class="check-sum">${esc(lines[0])}</span></div>${rows ? `<div class="kvs">${rows}</div>` : ""}</div>`;
+}
+
+function checkHtml(f) {
+  const label = (RULES[f.rule] || [f.rule])[0];
+  const first = String(f.message).split("\n")[0];
+  const rows = kvRowsHtml(f);
+  const bad = rows.includes('tick bad');
+  return `<div class="check"><div class="check-head"><span class="tick ${bad ? "bad" : "ok"}">${bad ? "✗" : "✓"}</span><b>${esc(label)}</b><span class="check-sum">${esc(first)}</span></div>${rows ? `<div class="kvs">${rows}</div>` : ""}</div>`;
 }
 
 function openDetails(idx) {
