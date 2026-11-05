@@ -312,6 +312,14 @@ h2 { font-size: 18px; margin: 0; }
 .sso-btn svg { width: 20px; height: 20px; flex: none; }
 .login .form-error { margin-top: 14px; text-align: left; }
 .login-note { margin: 18px 0 0; font-size: 12.5px; color: var(--muted); }
+.known { max-width: 720px; margin: 0 auto 18px; display: grid; gap: 8px; text-align: left; }
+.known-title { font-size: 13px; font-weight: 600; color: var(--muted); }
+.known-row { display: flex; align-items: center; gap: 8px; }
+.known-go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.known-go:hover, .known-go:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); outline: none; }
+.known-go span { min-width: 0; overflow-wrap: anywhere; }
+.known-go small { display: block; color: var(--muted); }
+.known-or { font-size: 13px; color: var(--muted); text-align: center; margin-top: 6px; }
 .details-form input[readonly] { background: var(--bg); color: var(--muted); }
 @media (max-width: 560px) {
   .topbar-in { flex-wrap: wrap; }

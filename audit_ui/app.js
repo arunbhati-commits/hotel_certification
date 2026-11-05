@@ -637,19 +637,63 @@ function checkDetails(d) {
   return bad;
 }
 
-let editingDetails = false;
+// Everyone who has registered on this browser, keyed by email, so a returning
+// user signs straight back in instead of filling the form again.
+// Details are locked once submitted: there is no edit, and registering the same
+// email again keeps the first details.
+function loadAccounts() {
+  try {
+    const all = JSON.parse(localStorage.getItem("tjAccounts") || "{}");
+    const old = JSON.parse(localStorage.getItem("tjPartner") || "null");  // details saved before this list existed
+    if (old && old.email && !all[old.email.toLowerCase()]) all[old.email.toLowerCase()] = old;
+    return Object.fromEntries(Object.entries(all).filter(([, d]) => d && !Object.keys(checkDetails(d)).length));
+  } catch (_) { return {}; }
+}
+function saveAccounts(all) { try { localStorage.setItem("tjAccounts", JSON.stringify(all)); } catch (_) {} }
+function rememberAccount(d) {
+  const all = loadAccounts();
+  const key = d.email.toLowerCase();
+  if (!all[key]) { all[key] = d; saveAccounts(all); }
+  return all[key];
+}
+function signInAs(d) {
+  partner = d;
+  try { localStorage.setItem("tjPartner", JSON.stringify(d)); } catch (_) {}
+  showPartner();
+}
+
+function renderKnownAccounts(show) {
+  const box = $("knownAccounts");
+  const list = Object.values(loadAccounts());
+  box.classList.toggle("hidden", !show || !list.length);
+  if (!show || !list.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="known-title">Already registered? Continue as</div>` + list.map((d, i) => `
+    <div class="known-row">
+      <button type="button" class="known-go" data-i="${i}"><span class="who-icon">👤</span>
+        <span><b>${esc(d.name)}</b> · ${esc(d.company)}<small>${esc(d.email)} · TJ ID ${esc(d.tjUserId)}</small></span></button>
+    </div>`).join("") + `<div class="known-or">or register a new user below</div>`;
+  box.querySelectorAll(".known-go").forEach((b) => { b.onclick = () => signInAs(list[+b.dataset.i]); });
+}
+
+// Typing an email that is already registered shows its saved (locked) details
+$("detailsForm").elements.email.addEventListener("change", (e) => {
+  const d = loadAccounts()[e.target.value.trim().toLowerCase()];
+  if (!d) return;
+  DETAIL_FIELDS.forEach(([k]) => { e.target.form.elements[k].value = d[k]; });
+});
 
 // Without Google/Microsoft sign-in, the details form is the sign-in page:
 // until it is submitted, only the form is shown (no upload box or results).
 function showPartner() {
   const on = !!partner;
-  const signedOut = !on && !authUser && !editingDetails;
+  const signedOut = !on && !authUser;
   document.body.classList.toggle("signed-out", signedOut);
   $("detailsTitle").textContent = signedOut ? "Sign in to continue" : "Your details";
   $("detailsHint").textContent = signedOut
     ? "Enter your details to start checking your Hotel API V3 UAT test cases. Fields marked * are required."
     : "Fill this in once before you upload. Fields marked * are required.";
   $("detailsSubmit").textContent = signedOut ? "Sign in →" : "Submit & continue to upload →";
+  renderKnownAccounts(signedOut);
   $("detailsSection").classList.toggle("hidden", on);
   $("whoBar").classList.toggle("hidden", !on);
   $("dropZone").classList.toggle("hidden", !on);
@@ -659,8 +703,7 @@ function showPartner() {
 
 // Top-bar account chip with Log out: shown when signed in, or once details are submitted
 function updateUserChip() {
-  const saved = (() => { try { return JSON.parse(localStorage.getItem("tjPartner") || "null"); } catch (_) { return null; } })();
-  const who = authUser ? authUser.email : partner ? partner.email : editingDetails && saved ? saved.email : "";
+  const who = authUser ? authUser.email : partner ? partner.email : "";
   $("userEmail").textContent = who;
   $("userChip").classList.toggle("hidden", !who);
 }
@@ -681,28 +724,20 @@ $("detailsForm").addEventListener("submit", (e) => {
   $("detailsError").textContent = msgs.join(" ");
   $("detailsError").classList.toggle("hidden", !msgs.length);
   if (msgs.length) { form.elements[Object.keys(bad)[0]].focus(); return; }
-  partner = d;
-  editingDetails = false;
-  try { localStorage.setItem("tjPartner", JSON.stringify(d)); } catch (_) {}
-  showPartner();
+  signInAs(rememberAccount(d));  // an already-registered email keeps its first details
   $("dropZone").scrollIntoView({ behavior: "smooth", block: "start" });
-});
-
-$("editDetails").addEventListener("click", () => {
-  const form = $("detailsForm");
-  DETAIL_FIELDS.forEach(([k]) => { form.elements[k].value = partner ? partner[k] : ""; });
-  partner = null;
-  editingDetails = true;
-  showPartner();
-  form.elements.name.focus();
 });
 
 // Saved details are reused only for the same signed-in account
 function restorePartner() {
   try {
-    const saved = JSON.parse(localStorage.getItem("tjPartner") || "null");
-    const sameUser = !authUser || (saved && saved.email === authUser.email);
-    if (saved && sameUser && !Object.keys(checkDetails(saved)).length) partner = saved;
+    if (authUser) {
+      // Google / Microsoft account: reuse the details registered for that email
+      partner = loadAccounts()[authUser.email.toLowerCase()] || null;
+    } else {
+      const saved = JSON.parse(localStorage.getItem("tjPartner") || "null");
+      if (saved && !Object.keys(checkDetails(saved)).length) partner = saved;
+    }
   } catch (_) {}
   const form = $("detailsForm");
   if (authUser) {
@@ -773,9 +808,10 @@ function showApp() {
   restorePartner();
 }
 
-// Log out: end the sign-in session and forget the saved details on this browser
+// Log out: end the session. Registered details stay, so next time it is one click
+// ("Continue as …"); the × next to a name forgets it on this browser.
 $("signOutBtn").addEventListener("click", async () => {
-  if (!confirm("Log out? Your saved details will be cleared from this browser.")) return;
+  if (!confirm("Log out?")) return;
   try { localStorage.removeItem("tjPartner"); } catch (_) {}
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
   location.reload();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tripjack Certification V3 Hotel</title>
-  <link rel="stylesheet" href="styles.css?v=42" />
+  <link rel="stylesheet" href="styles.css?v=44" />
 </head>
 <body>
   <header class="topbar">
@@ -52,6 +52,7 @@
       <div class="upload-icon">👤</div>
       <h2 id="detailsTitle">Your details</h2>
       <p class="hint" id="detailsHint">Fill this in once before you upload. Fields marked * are required.</p>
+      <div id="knownAccounts" class="known hidden"></div>
       <form id="detailsForm" class="details-form" novalidate>
         <label>Full name *<input name="name" autocomplete="name" maxlength="80" required /></label>
         <label>Company name *<input name="company" autocomplete="organization" maxlength="120" required /></label>
@@ -66,7 +67,6 @@
     <div id="whoBar" class="who hidden">
       <span class="who-icon">👤</span>
       <div class="who-text" id="whoText"></div>
-      <button type="button" id="editDetails" class="btn">Edit details</button>
     </div>
 
     <section class="upload hidden" id="dropZone">
@@ -168,6 +168,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=42"></script>
+  <script src="app.js?v=44"></script>
 </body>
 </html>
