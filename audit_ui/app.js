@@ -22,7 +22,7 @@ const TEST_CASES = [
 function bookingDetailNote(tc) {
   if (tc.infoOnly) return "";
   let t = "After the booking is made, call Booking Detail and add its request and response. The status must be the updated booking status.";
-  if (tc.cancel) t += " After cancelling, call Booking Detail again and add that request and response too; it must show the updated status CANCELLED.";
+  if (tc.cancel) t += " After cancelling, call Booking Detail again and add that request and response too; it must show the updated status CANCELLED (CANCELLATION_PENDING is accepted in UAT; in production keep calling Booking Detail until it shows CANCELLED).";
   return t;
 }
 
@@ -138,6 +138,9 @@ function explain(f) {
                  fix: `Add the ${m[1]} file for this call to the test case folder, then upload again.` };
       break;
     case "AFTER_CANCEL": {
+      if (/accepted in UAT/.test(first)) return {
+        problem: `The Booking Detail after cancel shows ${(first.match(/shows (\S+):/) || [])[1] || "CANCELLATION_PENDING"}. That is fine in UAT, so this test case passes.`,
+        fix: "Production tip: cancellation can take a while to complete. Keep calling Booking Detail (e.g. every few minutes) until the status is CANCELLED, and only then show the booking as cancelled to your customer." };
       if (/^Missing file/.test(first))
         return { problem: "The Booking Detail response after the cancel is missing. After cancelling, Booking Detail must be called again to show the updated status (CANCELLED).",
                  fix: "After the Cancel call, call Booking Detail again for this bookingId and add its response to this folder (e.g. \"TJ test hotel detail after cancel Response.json\")." };
@@ -198,6 +201,9 @@ function explain(f) {
       return { problem: first, fix: "Rooms, adults and children must match the requirement for this test case." };
     }
     case "CANCEL_ALL":
+      if (/accepted in UAT/.test(first)) return {
+        problem: `${first.split(":")[0]}. That is fine in UAT, so it counts as cancelled.`,
+        fix: "Production tip: keep calling Booking Detail until the status is CANCELLED before you treat the booking as cancelled." };
       if (/^No Booking Detail response/.test(first))
         return { problem: "No Booking Detail response was added to this folder.", fix: "Cancel every test booking, call Booking Detail for each one and add the responses (showing CANCELLED) here." };
       if ((m = first.match(/^Booking (\S+) has status (\S+), expected CANCELLED \(([^)]*)\)/)))
@@ -269,7 +275,7 @@ function evaluate(tc, row) {
   if (!row) return { tc, row: null, state: "missing", errors: [], notes: [] };
   const errors = row.findings.filter((f) => f.severity === "ERROR");
   // Policy-only / cleanup cases are not expected to have a full booking flow
-  const notes = row.findings.filter((f) => f.severity === "WARN" && !tc.infoOnly);
+  const notes = row.findings.filter((f) => f.severity === "WARN" && (!tc.infoOnly || /accepted in UAT/.test(f.message)));
   return { tc, row, state: errors.length ? "fail" : "pass", errors, notes };
 }
 

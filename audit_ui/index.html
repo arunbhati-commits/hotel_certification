@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tripjack Certification V3 Hotel</title>
-  <link rel="stylesheet" href="styles.css?v=41" />
+  <link rel="stylesheet" href="styles.css?v=42" />
 </head>
 <body>
   <header class="topbar">
@@ -97,7 +97,7 @@
           <li><b>Use only TJ test hotels</b>: every hotel ID (<code>hids</code> / <code>hid</code>) must start with <code>10</code>, otherwise certification fails.</li>
           <li>Hold and/or Book request + response (and Confirm Hold if you held first).</li>
           <li><b>Every booking must have a Booking Detail call</b>: after booking, add the Booking Detail request + response with the updated status.</li>
-          <li>For cancel cases: Cancel request + response, then <b>call Booking Detail again so it shows the updated status (CANCELLED)</b>.</li>
+          <li>For cancel cases: Cancel request + response, then <b>call Booking Detail again so it shows the updated status (CANCELLED)</b>. CANCELLATION_PENDING is accepted in UAT, but <b>in production keep calling Booking Detail until it shows CANCELLED</b>.</li>
           <li>Test Case 14: the Booking Detail response of <b>every</b> test booking showing CANCELLED.</li>
         </ul>
       </details>
@@ -168,6 +168,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=41"></script>
+  <script src="app.js?v=42"></script>
 </body>
 </html>

@@ -2141,6 +2141,16 @@ def _is_cancelled(status: "str | None") -> bool:
     return (status or "").strip().upper() in ("CANCELLED", "CANCELED")
 
 
+def _is_cancel_pending(status: "str | None") -> bool:
+    """CANCELLATION_PENDING: accepted in UAT; in production the partner must poll until CANCELLED."""
+    s = (status or "").strip().upper()
+    return "CANCEL" in s and "PENDING" in s
+
+
+PENDING_PROD_TIP = ("accepted in UAT. In production, keep calling Booking Detail until the status is "
+                    "CANCELLED before you treat the booking as cancelled")
+
+
 def _booking_detail_records(case_dir: Path) -> "list[tuple[str, str, str]]":
     """Return (bookingId, status, file name) for every booking-detail response in a case folder."""
     records: list[tuple[str, str, str]] = []
@@ -2177,25 +2187,27 @@ def validate_cancel_all(case_dir: Path, result: CaseResult) -> None:
         return
 
     # One verdict per booking: CANCELLED if any of its responses shows CANCELLED
+    # One verdict per booking: the best status any of its responses shows (CANCELLED > pending > other)
+    rank = lambda st: 2 if _is_cancelled(st) else 1 if _is_cancel_pending(st) else 0
     by_id: dict[str, tuple[str, str]] = {}
     for bid, status, fname in records:
-        if bid not in by_id or (_is_cancelled(status) and not _is_cancelled(by_id[bid][0])):
+        if bid not in by_id or rank(status) > rank(by_id[bid][0]):
             by_id[bid] = (status, fname)
 
     rows = []
     for bid, (status, fname) in sorted(by_id.items()):
-        ok = _is_cancelled(status)
+        ok = _is_cancelled(status) or _is_cancel_pending(status)
         if ok:
             result.cancelled_ids.add(bid)
+            if _is_cancel_pending(status):
+                result.add("WARN", "CANCEL_ALL", f"Booking {bid} shows {status} ({fname}): {PENDING_PROD_TIP}")
         else:
-            hint = (" - cancellation still pending, fetch Booking Detail again once it shows CANCELLED"
-                    if "PENDING" in status else "")
             result.add("ERROR", "CANCEL_ALL",
-                       f"Booking {bid} has status {status}, expected CANCELLED ({fname}){hint}")
+                       f"Booking {bid} has status {status}, expected CANCELLED ({fname})")
         rows.append(f"{bid} : {status}  [{'matched' if ok else 'unmatched'}]")
-    done = sum(1 for st, _ in by_id.values() if _is_cancelled(st))
+    done = sum(1 for st, _ in by_id.values() if _is_cancelled(st) or _is_cancel_pending(st))
     result.add("INFO", "CANCEL_ALL",
-               f"{done} of {len(by_id)} booking(s) show CANCELLED\n" + "\n".join(rows))
+               f"{done} of {len(by_id)} booking(s) cancelled (CANCELLED, or CANCELLATION_PENDING in UAT)\n" + "\n".join(rows))
 
 
 def apply_cancel_coverage(results: "list[CaseResult]") -> None:
@@ -3048,6 +3060,9 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
         if not (paths.get("booking_detail_after_cancel_res") or data.get("booking_detail_after_cancel_res")):
             result.add("ERROR", "AFTER_CANCEL",
                        "Missing file: Booking Detail Response after cancel (must show status CANCELLED)")
+        elif _is_cancel_pending(result.booking_status_after_cancel):
+            result.add("WARN", "AFTER_CANCEL",
+                       f"Booking Detail after cancel shows {result.booking_status_after_cancel}: {PENDING_PROD_TIP}")
         elif not _is_cancelled(result.booking_status_after_cancel):
             result.add("ERROR", "AFTER_CANCEL",
                        f"Booking Detail after cancel shows status {result.booking_status_after_cancel or '(none)'}, expected CANCELLED")
