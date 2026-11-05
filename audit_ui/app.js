@@ -9,7 +9,7 @@ const TEST_CASES = [
   { n: 7,  desc: "Instant booking", city: "International", adults: "1, 2, 1, 1, 1", children: "2, 1, 1, 0, 0", rooms: "5" },
   { n: 8,  desc: "Instant booking", city: "International", adults: "3, 3", children: "0, 0", rooms: "2" },
   { n: 9,  desc: "Cancellation rules and policies are displayed in your application", infoOnly: true,
-    note: "Policy-only case: a booking flow is not required, so missing booking files are not counted." },
+    note: "Policy-only case: no booking is needed, but the Search, Detail, Review request + response and the Cancellation Policy response are required." },
   { n: 10, desc: "Same PAN for all rooms", city: "Domestic / International", adults: "2, 2", children: "1, 0", rooms: "2", note: "Indian nationals only (nationality 106). In the Book request, the lead guest of every room must have the same PAN (the lead guest's PAN)." },
   { n: 11, desc: "Same PAN for all guests", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Indian nationals only (nationality 106). In the Book request, every adult guest must have the same PAN (the lead guest's PAN)." },
   { n: 12, desc: "Booking using PASSPORT", city: "Domestic / International", adults: "2", children: "1", rooms: "1", note: "Non-Indian nationality (any code except 106, which is India) with a valid passport number (if applicable). The Book request must contain a valid passport number for the guests." },
@@ -130,6 +130,12 @@ function explain(f) {
       if (/not found/i.test(first)) return { problem: "reviewHash is missing in the Review request.", fix: "Copy the reviewHash from the Detail response into the Review request." };
       return { problem: "The reviewHash in the Review request is not the one returned in the Detail response.",
                fix: field("Detail Response") ? `Send this reviewHash from the Detail response: ${field("Detail Response")}` : "Send the reviewHash from the Detail response unchanged." };
+    case "FLOW_SEQUENCE": {
+      if ((m = first.match(/^Missing flow file: (.+?) \(this test case needs: (.*)\)$/)))
+        return { problem: `The ${m[1]} file is missing. This test case needs the full flow: ${m[2]}.`,
+                 fix: `Add the ${m[1]} file to this test case folder (run that API call and save its ${/Response$/.test(m[1]) ? "response" : "request"}), then upload again.` };
+      break;
+    }
     case "BOOKING_ID": {
       if ((m = first.match(/^bookingId missing: (.*) has no bookingId(?: \(expected (\S+)\))?/)))
         return { problem: `${m[1]} does not contain a bookingId. Every request after Review (Hold / Book / Confirm / Booking Detail / Cancel) must send the bookingId of this booking.`,

@@ -160,8 +160,12 @@ FILE_PATTERNS: dict[str, list[str]] = {
     "cancel_policy_res": ["cancellation policy response", "cancellationpolicy_response"],
     "hold_req": ["hotel hold request", "hold_request", "holdrequest"],
     "hold_res": ["hotel hold response", "hold_response", "holdresponse"],
-    "confirm_hold_req": ["confirm-hold request", "confirm hold request", "confirmhold_request"],
-    "confirm_hold_res": ["confirm-hold response", "confirm hold response", "confirmhold_response"],
+    "confirm_hold_req": ["confirm-hold request", "confirm hold request", "confirmhold_request",
+                         "confirm hold booking request", "confirm hold book request", "confirm booking request",
+                         "confirm book request", "confirmhold booking request"],
+    "confirm_hold_res": ["confirm-hold response", "confirm hold response", "confirmhold_response",
+                         "confirm hold booking response", "confirm hold book response", "confirm booking response",
+                         "confirm book response", "confirmhold booking response"],
     "book_req": ["hotel book request", "book_request", "bookrequest"],
     "book_res": ["hotel book response", "book_response", "bookresponse"],
     "booking_detail_req": ["hotel booking detail request", "booking detail request",
@@ -653,6 +657,11 @@ def find_file(case_dir: Path, patterns: list[str], skip_if: list[str] | None = N
 _SKIP_IF: dict[str, list[str]] = {
     "detail_req": ["booking", "bookdetail", "static"],
     "detail_res": ["booking", "bookdetail", "static"],
+    # "Confirm Hold Request" contains "hold request": keep confirm files out of the hold / book slots
+    "hold_req": ["confirm"],
+    "hold_res": ["confirm"],
+    "book_req": ["confirm"],
+    "book_res": ["confirm"],
 }
 
 
@@ -1220,10 +1229,37 @@ def _spec_for(case_name: str) -> dict:
     return {}
 
 
+# Steps each certification case must contain (after Search, Detail and Review).
+# Case 9 shows the cancellation policy instead of booking; case 14 (cancel all) is checked separately.
+CASE_FLOWS: dict[int, tuple[str, ...]] = {
+    1: ("hold",),                       # ON HOLD booking that is auto-cancelled
+    9: ("policy",),
+    2: ("book",),
+    3: ("hold", "confirm"),
+    4: ("book", "cancel"),
+    5: ("book", "cancel"),
+    6: ("hold", "cancel"),
+    7: ("book",), 8: ("book",), 10: ("book",), 11: ("book",), 12: ("book",), 13: ("book",),
+}
+_FLOW_STEP_SLOTS = {
+    "hold": [("hold_req", "Hold Request"), ("hold_res", "Hold Response")],
+    "book": [("book_req", "Book Request"), ("book_res", "Book Response")],
+    "confirm": [("confirm_hold_req", "Confirm-Hold Request"), ("confirm_hold_res", "Confirm-Hold Response")],
+    "cancel": [("cancel_req", "Cancel Request"), ("cancel_res", "Cancel Response")],
+    "policy": [("cancel_policy_res", "Cancellation Policy Response")],
+}
+
+
+def _case_no(case_name: str) -> int | None:
+    m = re.search(r"(?:case|tc|test)[\s_-]*0*(\d{1,2})(?!\d)", case_name, re.I) or re.search(r"\b(\d{1,2})\b", case_name)
+    return int(m.group(1)) if m else None
+
+
 def validate_flow_sequence(result: CaseResult, paths: dict, case_name: str,
                            data: dict | None = None) -> None:
     """Validate the booking flow file sequence is complete."""
     spec = _spec_for(case_name)
+    required = CASE_FLOWS.get(_case_no(case_name)) if spec else None
 
     def _present(slot: str) -> bool:
         # A slot is present if it has a file path OR non-empty data
@@ -1246,6 +1282,23 @@ def validate_flow_sequence(result: CaseResult, paths: dict, case_name: str,
         ("review_req",  "Review Request"),
         ("review_res",  "Review Response"),
     ]
+    if required:
+        # Certification case: the flow is fixed, so every missing file fails the case
+        for step in required:
+            if step == "cancel":
+                continue  # Cancel comes after Booking Detail
+            sequence += _FLOW_STEP_SLOTS[step]
+        if "policy" not in required:  # every booking is followed by Booking Detail
+            sequence += [("booking_detail_req", "Booking Detail Request"), ("booking_detail_res", "Booking Detail Response")]
+        if "cancel" in required:
+            sequence += _FLOW_STEP_SLOTS["cancel"]
+        missing = [lbl for k, lbl in sequence if not _present(k)]
+        flow_txt = " -> ".join(lbl for _, lbl in sequence)
+        if not missing:
+            result.add("INFO", "FLOW_SEQUENCE", "Complete flow: " + flow_txt)
+        for lbl in missing:
+            result.add("ERROR", "FLOW_SEQUENCE", f"Missing flow file: {lbl} (this test case needs: {flow_txt})")
+        return
     if is_hold:
         sequence += [("hold_req", "Hold Request"), ("hold_res", "Hold Response")]
         if has_confirm:
@@ -2882,12 +2935,15 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             if any(r.get("hasPan") for r in actual_trav):
                 result.add("WARN", "PAN", "pan not required but PAN present (may be OK for corporate cases)")
 
-    # --- missing expected files ---
-    if not paths.get("search_req") and not data.get("search_req"):
+    # --- missing expected files (certification cases report these as FLOW_SEQUENCE errors instead) ---
+    _fixed_flow = bool(CASE_FLOWS.get(_case_no(case_dir.name)) and _spec_for(case_dir.name))
+    if _fixed_flow:
+        pass
+    elif not paths.get("search_req") and not data.get("search_req"):
         result.add("WARN", "FILES", "missing Hotel Search Request")
-    if not paths.get("detail_res") and not data.get("detail_res"):
+    if not _fixed_flow and not paths.get("detail_res") and not data.get("detail_res"):
         result.add("WARN", "FILES", "missing hotelDetail-search Response")
-    if not paths.get("review_res") and not data.get("review_res"):
+    if not _fixed_flow and not paths.get("review_res") and not data.get("review_res"):
         result.add("WARN", "FILES", "missing Hotel review Response")
 
     # --- Booking flow sequence ---
