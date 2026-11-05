@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tripjack Certification V3 Hotel</title>
-  <link rel="stylesheet" href="styles.css?v=37" />
+  <link rel="stylesheet" href="styles.css?v=38" />
 </head>
 <body>
   <header class="topbar">
@@ -94,7 +94,7 @@
         <ul>
           <li>Search, Detail and Review request + response. <b>Search and Detail requests must contain <code>"timeoutMs"</code></b> (e.g. 30000), otherwise certification fails.</li>
           <li>Search can list many hotels, but <b>the Detail request must be for exactly one hotel</b> (one <code>hid</code>).</li>
-          <li><b>Use only TJ test hotels</b>: every hotel ID (<code>hids</code> / <code>hid</code>) must start with <code>100000</code>, otherwise certification fails.</li>
+          <li><b>Use only TJ test hotels</b>: every hotel ID (<code>hids</code> / <code>hid</code>) must start with <code>10</code>, otherwise certification fails.</li>
           <li>Hold and/or Book request + response (and Confirm Hold if you held first).</li>
           <li><b>Every booking must have a Booking Detail call</b>: after booking, add the Booking Detail request + response with the updated status.</li>
           <li>For cancel cases: Cancel request + response, then <b>call Booking Detail again so it shows the updated status (CANCELLED)</b>.</li>
@@ -168,6 +168,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=37"></script>
+  <script src="app.js?v=38"></script>
 </body>
 </html>

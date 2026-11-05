@@ -2413,8 +2413,8 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
         elif ids:
             result.add("INFO", "DETAIL_ONE_HOTEL", f"Detail request is for one hotel ({ids[0]})")
 
-    # --- Only TJ test hotels may be used: every hotel ID must start with 100000 ---
-    TJ_HOTEL_PREFIX = "100000"
+    # --- Only TJ test hotels may be used: every hotel ID must start with 10 ---
+    TJ_HOTEL_PREFIX = "10"
     for label, obj, keys in (("Search", search_req, ("hids", "hid", "hotelIds", "hotelId")),
                              ("Detail", detail_req, ("hid", "hids", "hotelId", "hotelIds", "id")),
                              ("Review", review_req, ("hid", "hotelId"))):

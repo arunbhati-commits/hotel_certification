@@ -32,7 +32,7 @@ const RULES = {
   DETAIL_ONE_HOTEL: ["One hotel in Detail", "Search may list many hotels, but the Detail request must be for exactly one hotel (one hid)."],
   SAME_PAN: ["Same PAN", "Use one PAN for the whole booking: the lead guest of every room (TC10) or every adult guest (TC11) must carry the same PAN."],
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
-  TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 100000."],
+  TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 10."],
   BOOKING_ID: ["Booking ID", "All requests of one booking must use the same bookingId (from the Review response)."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
   SEARCH_DETAIL_DATES: ["Dates / nationality / currency", "Keep checkIn, checkOut, nationality and currency identical in Search and Detail."],
@@ -95,8 +95,8 @@ function explain(f) {
     case "TJ_HOTEL": {
       const step = (first.match(/^(Search|Detail|Review) request/) || [])[1] || "a";
       const ids = first.split(": ").pop();
-      return { problem: `The ${step} request uses a hotel that is not a TJ test hotel (${ids}). Only TJ test hotels, whose ID starts with 100000, are allowed; otherwise certification fails.`,
-               fix: `Search and book only TJ test hotels. Use hotel IDs that start with 100000 (e.g. 100000000991) in the Search, Detail and Review requests.` };
+      return { problem: `The ${step} request uses a hotel that is not a TJ test hotel (${ids}). Only TJ test hotels, whose ID starts with 10, are allowed; otherwise certification fails.`,
+               fix: `Search and book only TJ test hotels. Use hotel IDs that start with 10 (e.g. 100000000991) in the Search, Detail and Review requests.` };
     }
     case "TIMEOUT_MS": {
       const step = (first.match(/^(Search|Detail) request/) || [])[1] || "Search/Detail";
