@@ -33,6 +33,7 @@ const RULES = {
   SAME_PAN: ["Same PAN", "Use one PAN for the whole booking: the lead guest of every room (TC10) or every adult guest (TC11) must carry the same PAN."],
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 10."],
+  AFTER_CANCEL: ["Booking Detail after cancel", "After cancelling, call Booking Detail again and add its response; it must show status CANCELLED."],
   BOOKING_ID: ["Booking ID", "All requests of one booking must use the same bookingId (from the Review response)."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
   SEARCH_DETAIL_DATES: ["Dates / nationality / currency", "Keep checkIn, checkOut, nationality and currency identical in Search and Detail."],
@@ -130,6 +131,15 @@ function explain(f) {
       if (/not found/i.test(first)) return { problem: "reviewHash is missing in the Review request.", fix: "Copy the reviewHash from the Detail response into the Review request." };
       return { problem: "The reviewHash in the Review request is not the one returned in the Detail response.",
                fix: field("Detail Response") ? `Send this reviewHash from the Detail response: ${field("Detail Response")}` : "Send the reviewHash from the Detail response unchanged." };
+    case "AFTER_CANCEL": {
+      if (/^Missing file/.test(first))
+        return { problem: "The Booking Detail response after the cancel is missing. After cancelling, Booking Detail must be called again to show the updated status (CANCELLED).",
+                 fix: "After the Cancel call, call Booking Detail again for this bookingId and add its response to this folder (e.g. \"TJ test hotel detail after cancel Response.json\")." };
+      const st = (first.match(/shows status (\S+)/) || [])[1] || "";
+      return { problem: `The Booking Detail after cancel shows status ${st}, but it must show CANCELLED.`,
+               fix: /PENDING/i.test(st) ? "The cancellation is still being processed. Wait a few minutes, call Booking Detail again until it shows CANCELLED, and add that response."
+                                        : "Make sure the booking was really cancelled, then call Booking Detail again and add the response that shows CANCELLED." };
+    }
     case "FLOW_SEQUENCE": {
       if ((m = first.match(/^Missing flow file: (.+?) \(this test case needs: (.*)\)$/)))
         return { problem: `The ${m[1]} file is missing. This test case needs the full flow: ${m[2]}.`,

@@ -3016,6 +3016,21 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             result.add("INFO", "BOOKING_STATUS",
                 f"Booking status after cancellation: {result.booking_status_after_cancel}")
 
+    # --- Every cancelled booking needs a Booking Detail response after the cancel showing CANCELLED ---
+    _required_flow = CASE_FLOWS.get(_case_no(case_dir.name)) if _spec_for(case_dir.name) else None
+    _has_cancel = bool((_required_flow and "cancel" in _required_flow)
+                       or paths.get("cancel_req") or paths.get("cancel_res")
+                       or data.get("cancel_req") or data.get("cancel_res"))
+    if _has_cancel and not _spec_for(case_dir.name).get("cancel_all"):
+        if not (paths.get("booking_detail_after_cancel_res") or data.get("booking_detail_after_cancel_res")):
+            result.add("ERROR", "AFTER_CANCEL",
+                       "Missing file: Booking Detail Response after cancel (must show status CANCELLED)")
+        elif not _is_cancelled(result.booking_status_after_cancel):
+            result.add("ERROR", "AFTER_CANCEL",
+                       f"Booking Detail after cancel shows status {result.booking_status_after_cancel or '(none)'}, expected CANCELLED")
+        else:
+            result.add("INFO", "AFTER_CANCEL", "Booking Detail after cancel shows CANCELLED")
+
     # --- What was actually requested (from the search request, else the detail request) ---
     for _rq in (search_req, data.get("detail_req") or {}):
         if not isinstance(_rq, dict) or not _rq:
