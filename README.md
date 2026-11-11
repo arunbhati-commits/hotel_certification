@@ -22,6 +22,16 @@ python3 validate_hotel_test_cases.py --root "/path/to/test cases"
 python3 validate_hotel_test_cases.py --root "/path/to/test cases" --case "Test Case 4" --json-report report.json
 ```
 
+## Upload log
+
+Every folder upload, including failed ones, is logged so bugs can be traced afterwards:
+
+- `logs/uploads.log`: one readable block per upload. It shows the user, the files received, used and skipped, the cases found, the result for each case with every ERROR and WARN, the HTTP status, the error shown to the user, and the traceback if the server crashed.
+- `logs/uploads/<id>.json`: the full detail for one upload, including the file list and which file matched which slot in each case.
+- On Vercel the disk is not kept, so each upload is one `[upload-log]` line in Vercel → Project → Logs. Set `UPLOAD_LOG_DIR` to write the files to another folder.
+
+`logs/` is not committed: it holds partner details.
+
 ## Deploy on Vercel
 
 The repo deploys to Vercel as-is (Framework preset: **Other**, no build command):

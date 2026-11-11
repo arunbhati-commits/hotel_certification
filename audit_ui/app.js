@@ -1,6 +1,7 @@
 // Certification requirements, one entry per test case (from the Tripjack self-certification table)
 const TEST_CASES = [
-  { n: 1,  cancel: true, desc: "Auto cancellation of booking in ON HOLD status (unconfirmed case)", city: "Domestic", adults: "1", children: "0", rooms: "1" },
+  { n: 1,  autoCancel: true, desc: "Auto cancellation of booking in ON HOLD status (unconfirmed case)", city: "Domestic", adults: "1", children: "0", rooms: "1",
+    note: "Do not leave the booking ON HOLD. Do not confirm it; let it be auto-cancelled, then call Booking Detail: it must show UNCONFIRMED or CANCELLED. CANCELLATION_PENDING is accepted in UAT; in production keep calling Booking Detail until it shows CANCELLED." },
   { n: 2,  desc: "Instant booking", city: "Domestic", adults: "4", children: "2", rooms: "1" },
   { n: 3,  desc: "Hold booking, then confirm booking", city: "Domestic", adults: "2, 3, 2", children: "2, 1, 1", rooms: "3" },
   { n: 4,  cancel: true, desc: "Create a booking within the cancellation deadline and cancel it", city: "Domestic", adults: "1, 2, 1, 1, 1", children: "2, 1, 1, 0, 0", rooms: "5" },
@@ -34,6 +35,7 @@ const RULES = {
   NATIONALITY: ["Nationality", "Test Case 12 needs a non-Indian nationality: use any nationality code except 106 (India) in Search and Detail."],
   TJ_HOTEL: ["TJ test hotel", "Use only TJ test hotels: every hotel ID (hids / hid) must start with 10."],
   FILE_PAIR: ["Request / response pair", "Every API call in the folder needs both its request and its response file."],
+  HOLD_AUTO_CANCEL: ["ON HOLD auto-cancel", "The ON HOLD booking must not be left on hold: the Booking Detail must show UNCONFIRMED or CANCELLED."],
   AFTER_CANCEL: ["Booking Detail after cancel", "After cancelling, call Booking Detail again and add its response; it must show status CANCELLED."],
   BOOKING_ID: ["Booking ID", "All requests of one booking must use the same bookingId (from the Review response)."],
   TIMEOUT_MS: ["timeoutMs", "Add \"timeoutMs\" (for example \"timeoutMs\": 30000) to the Search and Detail requests. It is mandatory."],
@@ -137,6 +139,17 @@ function explain(f) {
         return { problem: `The ${m[1]} file is missing. The folder has the ${m[2]}, so its matching ${/Response$/.test(m[1]) ? "response" : "request"} must be included too.`,
                  fix: `Add the ${m[1]} file for this call to the test case folder, then upload again.` };
       break;
+    case "HOLD_AUTO_CANCEL": {
+      if (/accepted in UAT/.test(first)) return {
+        problem: `The Booking Detail shows ${(first.match(/shows (\S+):/) || [])[1] || "CANCELLATION_PENDING"}. That is fine in UAT, so this test case passes.`,
+        fix: "Production tip: never leave an ON HOLD booking as it is. Keep calling Booking Detail until the status is CANCELLED (or UNCONFIRMED), and only then treat the booking as cancelled." };
+      if (/^No Booking Detail/.test(first))
+        return { problem: "There is no Booking Detail response showing what happened to the ON HOLD booking.",
+                 fix: "After the hold, wait for the booking to be auto-cancelled (do not confirm it), call Booking Detail and add the response that shows UNCONFIRMED or CANCELLED." };
+      const st = (first.match(/Booking Detail shows (.+?), expected/) || [])[1] || "ON_HOLD";
+      return { problem: `The booking was left ON HOLD: the Booking Detail shows ${st}. In this test case the ON HOLD booking must end as UNCONFIRMED or CANCELLED.`,
+               fix: "Do not confirm the hold and do not leave it on hold. Wait until it is auto-cancelled (or cancel it), call Booking Detail again and add the response that shows UNCONFIRMED or CANCELLED (CANCELLATION_PENDING is accepted in UAT)." };
+    }
     case "AFTER_CANCEL": {
       if (/accepted in UAT/.test(first)) return {
         problem: `The Booking Detail after cancel shows ${(first.match(/shows (\S+):/) || [])[1] || "CANCELLATION_PENDING"}. That is fine in UAT, so this test case passes.`,

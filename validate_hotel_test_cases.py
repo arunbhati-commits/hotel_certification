@@ -25,6 +25,7 @@ PRICE_TOLERANCE = 0.02
 TEST_CASE_SPECS: dict[str, dict] = {
     "Test Case 1": {
         "desc": "Auto-cancellation of booking in ON HOLD status",
+        "auto_cancel_hold": True,
         "domestic": True,
         "rooms": 1,
         "adults": [1],
@@ -665,9 +666,10 @@ _SKIP_IF: dict[str, list[str]] = {
     "hold_res": ["confirm"],
     "book_req": ["confirm"],
     "book_res": ["confirm"],
-    # "detail after cancel Response" contains "cancel response": keep it out of the cancel slots
-    "cancel_req": ["aftercancel", "postcancel"],
-    "cancel_res": ["aftercancel", "postcancel"],
+    # "detail after cancel Response" / "booking detail after auto cancel Response" contain
+    # "cancel response": they are Booking Detail calls, keep them out of the cancel slots
+    "cancel_req": ["aftercancel", "postcancel", "bookingdetail", "bookdetail"],
+    "cancel_res": ["aftercancel", "postcancel", "bookingdetail", "bookdetail"],
 }
 
 
@@ -2150,6 +2152,31 @@ def _is_cancel_pending(status: "str | None") -> bool:
 PENDING_PROD_TIP = ("accepted in UAT. In production, keep calling Booking Detail until the status is "
                     "CANCELLED before you treat the booking as cancelled")
 
+_AUTO_CANCEL_DONE = ("UNCONFIRMED", "CANCELLED", "CANCELED")
+
+
+def validate_hold_auto_cancel(case_dir: Path, result: "CaseResult") -> None:
+    """TC1: after the hold, Booking Detail must show the booking UNCONFIRMED or CANCELLED.
+    CANCELLATION_PENDING is accepted in UAT (with the production tip); still ON HOLD fails."""
+    records = [(bid, (st or "").strip().upper(), fn) for bid, st, fn in _booking_detail_records(case_dir)]
+    if not records and result.booking_status:
+        records = [("", result.booking_status.upper(), "Booking Detail Response")]
+    if not records:
+        result.add("ERROR", "HOLD_AUTO_CANCEL",
+                   "No Booking Detail response with a status: after the hold, the booking must show UNCONFIRMED or CANCELLED")
+        return
+    done = [r for r in records if r[1] in _AUTO_CANCEL_DONE]
+    pending = [r for r in records if _is_cancel_pending(r[1])]
+    if done:
+        result.add("INFO", "HOLD_AUTO_CANCEL", f"{done[0][2]} shows {done[0][1]}: the ON HOLD booking was not left on hold")
+    elif pending:
+        result.add("WARN", "HOLD_AUTO_CANCEL", f"{pending[0][2]} shows {pending[0][1]}: {PENDING_PROD_TIP}")
+    else:
+        seen = ", ".join(sorted({r[1] or "(none)" for r in records}))
+        result.add("ERROR", "HOLD_AUTO_CANCEL",
+                   f"Booking left ON HOLD: Booking Detail shows {seen}, expected UNCONFIRMED or CANCELLED "
+                   "(an ON HOLD booking must not be left on hold; it must be auto-cancelled)")
+
 
 def _booking_detail_records(case_dir: Path) -> "list[tuple[str, str, str]]":
     """Return (bookingId, status, file name) for every booking-detail response in a case folder."""
@@ -3051,6 +3078,10 @@ def validate_case(case_dir: Path, strict_option_id: bool = False) -> CaseResult:
             result.add("INFO", "BOOKING_STATUS",
                 f"Booking status after cancellation: {result.booking_status_after_cancel}")
 
+    # --- TC1: an ON HOLD booking must not be left on hold; it must end UNCONFIRMED or CANCELLED ---
+    if _spec_for(case_dir.name).get("auto_cancel_hold"):
+        validate_hold_auto_cancel(case_dir, result)
+
     # --- Every cancelled booking needs a Booking Detail response after the cancel showing CANCELLED ---
     _required_flow = CASE_FLOWS.get(_case_no(case_dir.name)) if _spec_for(case_dir.name) else None
     _has_cancel = bool((_required_flow and "cancel" in _required_flow)
@@ -3159,7 +3190,28 @@ def _is_case_folder(path: Path) -> bool:
     """True if path is a directory that is a test case (by name OR by content)."""
     if not path.is_dir() or path.name.startswith('.'):
         return False
-    return _is_test_case_dir(path.name) or _dir_has_data_files(path)
+    if _is_test_case_dir(path.name):
+        return True
+    # By content only when it has data files and holds no test cases below it.
+    # A wrapper folder with a stray file next to the cases (run-results.json,
+    # README.md, notes.txt) is a container, not one big test case.
+    return _dir_has_data_files(path) and not _has_nested_cases(path)
+
+
+def _has_nested_cases(path: Path) -> bool:
+    """True if path holds test cases: a sub-folder named like a test case at any
+    depth, or two or more sub-folders with data files. (One data sub-folder, such
+    as "after cancel", is still part of the case.)"""
+    def subdirs(d: Path) -> list[Path]:
+        try:
+            return [p for p in d.iterdir() if p.is_dir() and not p.name.startswith('.')]
+        except PermissionError:
+            return []
+
+    def named_case_below(d: Path, depth: int) -> bool:
+        return depth <= 6 and any(_is_test_case_dir(p.name) or named_case_below(p, depth + 1) for p in subdirs(d))
+
+    return named_case_below(path, 0) or sum(1 for p in subdirs(path) if _dir_has_data_files(p)) >= 2
 
 
 def discover_cases(root: Path, only_case: str | None) -> list[Path]:

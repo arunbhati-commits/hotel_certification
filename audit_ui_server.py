@@ -79,9 +79,9 @@ def _is_test_case_dir_by_name(name: str) -> bool:
 def _is_case_dir(p: Path) -> bool:
     """True if path is a directory that looks like a test case folder
     (by name OR by containing data files directly)."""
-    if not p.is_dir() or p.name.startswith('.'):
-        return False
-    return _is_test_case_dir_by_name(p.name) or _has_data_files(p)
+    # Same rule as the validator, so a wrapper folder with a stray file is not a case
+    from validate_hotel_test_cases import _is_case_folder
+    return _is_case_folder(p)
 
 
 def find_test_cases_root(base_dir: Path) -> Path | None:
@@ -191,6 +191,68 @@ def build_audit_payload(root: Path, only_case: str | None, strict_option_id: boo
         },
         "results": rows,
     }
+
+
+# ---- Upload log: one entry per upload, to find bugs afterwards ----
+# Locally:  logs/uploads.log (easy to read) and logs/uploads/<id>.json (full detail,
+#           including every finding and which file matched which slot).
+# Vercel:   one "[upload-log]" line in the Runtime Logs (the disk there is not kept).
+# The log folder is not in git; it can hold partner details, so keep it local.
+LOG_DIR = Path(os.environ.get("UPLOAD_LOG_DIR") or (ROOT / "logs"))
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _log_to_files() -> bool:
+    return bool(os.environ.get("UPLOAD_LOG_DIR")) or not os.environ.get("VERCEL")
+
+
+def write_upload_log(entry: dict) -> None:
+    """Never raises: logging must not break an upload."""
+    try:
+        res = entry.get("result") or {}
+        short = {k: v for k, v in entry.items() if k not in ("result", "files", "traceback")}
+        short["cases"] = [f"{r['case']}: {r['status']}" for r in res.get("results", [])]
+        print("[upload-log] " + json.dumps(short, ensure_ascii=False), flush=True)
+        if entry.get("traceback"):
+            print("[upload-log] traceback for " + entry["id"] + "\n" + entry["traceback"], flush=True)
+        if not _log_to_files():
+            return
+
+        (LOG_DIR / "uploads").mkdir(parents=True, exist_ok=True)
+        (LOG_DIR / "uploads" / f"{entry['id']}.json").write_text(
+            json.dumps(entry, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        p = entry.get("partner") or {}
+        lines = [
+            "=" * 78,
+            f"{entry['time']}  upload {entry['id']}  ->  HTTP {entry.get('http_status')}  ({entry.get('duration_ms')} ms)",
+            f"user     : {p.get('name', '')} | {p.get('company', '')} | TJ ID {p.get('tjUserId', '')} | "
+            f"{p.get('phone', '')} | {p.get('email', '')}" + (f" (signed in with {p['loginVia']})" if p.get("loginVia") else ""),
+            f"from     : {entry.get('client_ip', '')}  {entry.get('user_agent', '')[:90]}",
+            f"upload   : {entry.get('size_bytes', 0):,} bytes, {entry.get('files_received', 0)} file(s) received, "
+            f"{entry.get('files_saved', 0)} used, {len(entry.get('files_skipped', []))} skipped",
+        ]
+        if entry.get("cases_found") is not None:
+            lines.append(f"cases    : {len(entry['cases_found'])} found: {', '.join(entry['cases_found'])}")
+        if res.get("summary"):
+            s = res["summary"]
+            lines.append(f"result   : {s.get('passed')} passed, {s.get('failed')} failed, "
+                         f"{s.get('errors')} error(s), {s.get('warnings')} warning(s); mail: {entry.get('mail', '-')}")
+        for r in res.get("results", []):
+            errs = [f for f in r["findings"] if f["severity"] == "ERROR"]
+            warns = [f for f in r["findings"] if f["severity"] == "WARN"]
+            lines.append(f"  [{r['status']}] {r['case']}  ({len(errs)} error, {len(warns)} warn)")
+            for f in errs + warns:
+                msg = " ".join(str(f["message"]).split())
+                lines.append(f"      {f['severity']:5} {f['rule']}: {msg[:300]}")
+        if entry.get("error"):
+            lines.append(f"ERROR    : {entry['error']}")
+        if entry.get("traceback"):
+            lines.append("TRACEBACK:\n" + entry["traceback"].rstrip())
+        with open(LOG_DIR / "uploads.log", "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+    except Exception as e:
+        print(f"[upload-log] could not write log: {e}", file=sys.stderr, flush=True)
 
 
 CERT_CASES = range(1, 15)
@@ -390,6 +452,11 @@ class AuditUIHandler(BaseHTTPRequestHandler):
         print(f"[audit-ui ERROR] {fmt % args}", file=sys.stderr)
 
     def _send_json(self, code: int, payload: dict, cookie: str | None = None) -> None:
+        ulog = getattr(self, "_ulog", None)
+        if isinstance(ulog, dict):  # an upload is being logged: note what the user was told
+            ulog["http_status"] = code
+            if code >= 400:
+                ulog["error"] = payload.get("error")
         body = json.dumps(payload, indent=2).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -524,10 +591,7 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 return
 
             if path in ("/api/upload-folder", "/api/upload_folder", "/api/upload_folder.py"):
-                if auth.auth_enabled() and not self._user():
-                    self._send_json(401, {"error": "Please sign in again."})
-                    return
-                self._handle_folder_upload()
+                self._logged_folder_upload()
                 return
 
             if path != "/api/upload-zip":
@@ -648,8 +712,32 @@ class AuditUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_json(500, {"error": f"Server error: {str(e)}"})
 
+    def _logged_folder_upload(self) -> None:
+        """Run a folder upload and write one log entry for it, whatever the outcome."""
+        start = datetime.now(_IST)
+        self._ulog = {
+            "id": start.strftime("%Y%m%d-%H%M%S-") + os.urandom(3).hex(),
+            "time": start.strftime("%Y-%m-%d %H:%M:%S IST"),
+            "client_ip": (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip(),
+            "user_agent": self.headers.get("User-Agent", ""),
+            "size_bytes": self._get_content_length(),
+        }
+        try:
+            if auth.auth_enabled() and not self._user():
+                self._send_json(401, {"error": "Please sign in again."})
+                return
+            self._handle_folder_upload()
+        except Exception as e:
+            self._ulog["traceback"] = traceback.format_exc()
+            raise
+        finally:
+            self._ulog["duration_ms"] = int((datetime.now(_IST) - start).total_seconds() * 1000)
+            write_upload_log(self._ulog)
+            self._ulog = None
+
     def _handle_folder_upload(self) -> None:
         """Accept multipart/form-data folder upload (webkitdirectory) and validate."""
+        log = self._ulog if isinstance(getattr(self, "_ulog", None), dict) else {}
         try:
             content_type = self.headers.get("Content-Type", "")
             content_length = self._get_content_length()
@@ -669,6 +757,10 @@ class AuditUIHandler(BaseHTTPRequestHandler):
             if user:  # the signed-in account is the trusted identity
                 partner["email"] = user["email"]
                 partner["loginVia"] = user["provider"].title()
+            log["partner"] = partner
+            log["files_received"] = len(files)
+            log["files"] = [{"path": r, "bytes": len(c)} for r, c in files]
+            log["files_skipped"] = []
 
             if not files:
                 self._send_json(400, {"error": "No files parsed from upload. Ensure the folder contains JSON files."})
@@ -681,10 +773,12 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                     # Sanitise: normalise separators, strip leading slashes, block traversal
                     parts = [p for p in rel_path.replace("\\", "/").split("/") if p and p != ".."]
                     if not parts:
+                        log["files_skipped"].append(rel_path)
                         continue
                     # Reject known binary/media formats; accept everything else
                     _fname = parts[-1]
                     if _fname.startswith(".") or _fname.startswith("~") or _fname.startswith("$"):
+                        log["files_skipped"].append(rel_path)
                         continue
                     _ext = _fname.rsplit(".", 1)[-1].lower() if "." in _fname else ""
                     _BINARY = {
@@ -696,11 +790,13 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                         "class","jar","pyc","o","a",
                     }
                     if _ext in _BINARY:
+                        log["files_skipped"].append(rel_path)
                         continue
                     dest = temp_dir.joinpath(*parts)
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(content)
                     json_count += 1
+                log["files_saved"] = json_count
 
                 if json_count == 0:
                     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -716,6 +812,7 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 # it will find case folders at any nesting depth.
                 from validate_hotel_test_cases import discover_cases as _dc
                 probe = _dc(temp_dir, None)
+                log["cases_found"] = [c.name for c in probe]
                 print(f"[folder-upload] saved {json_count} file(s); discovered {len(probe)} case(s): "
                       + ", ".join(c.name for c in probe[:20]))
                 if not probe:
@@ -749,12 +846,15 @@ class AuditUIHandler(BaseHTTPRequestHandler):
                 result["certified"] = all_cases_passed(result)
                 # For now mail on every upload; to mail only on 14/14, wrap this in `if result["certified"]:`
                 result["certification_mail"] = send_certification_mail(partner, result)
+                log["mail"] = result["certification_mail"]
+                log["result"] = {"summary": result["summary"], "results": result["results"]}
                 summary = result["summary"]
                 print("[upload] " + json.dumps({**partner, "passed": summary.get("passed"), "failed": summary.get("failed")}), flush=True)
                 self._send_json(200, result)
 
             except Exception as e:
                 traceback.print_exc()
+                log["traceback"] = traceback.format_exc()
                 self._send_json(500, {"error": f"Validation failed: {str(e)}"})
             finally:
                 # Results are already in the response; never keep partner files on disk
@@ -763,6 +863,7 @@ class AuditUIHandler(BaseHTTPRequestHandler):
 
         except Exception as e:
             traceback.print_exc()
+            log["traceback"] = traceback.format_exc()
             self._send_json(500, {"error": f"Server error: {str(e)}"})
 
     def do_OPTIONS(self) -> None:
